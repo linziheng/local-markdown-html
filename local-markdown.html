@@ -56,19 +56,19 @@
 </head>
 <body>
   <div class="LocalMarkdown-app">
-    <aside class="LocalMarkdown-sidebar" aria-label="Local Markdown files">
+    <aside class="LocalMarkdown-sidebar" aria-label="Local Markdown open files">
       <div class="LocalMarkdown-sidebar-header">
         <strong>Local Markdown</strong>
         <button class="LocalMarkdown-new" id="LocalMarkdown-new" type="button" aria-label="New file">+</button>
       </div>
-      <nav class="LocalMarkdown-files" id="LocalMarkdown-files" aria-label="Files"></nav>
+      <nav class="LocalMarkdown-files" id="LocalMarkdown-files" aria-label="Open files"></nav>
     </aside>
 
     <main class="LocalMarkdown-main">
       <div class="LocalMarkdown-toolbar">
         <span class="LocalMarkdown-status" id="LocalMarkdown-status" role="status">Loading editor…</span>
         <button class="LocalMarkdown-action" id="LocalMarkdown-examples" type="button">Examples</button>
-        <button class="LocalMarkdown-action" id="LocalMarkdown-open-folder" type="button">Open folder</button>
+        <button class="LocalMarkdown-action" id="LocalMarkdown-open-file" type="button">Open file</button>
         <button class="LocalMarkdown-action" id="LocalMarkdown-save-file" type="button">Save</button>
         <button class="LocalMarkdown-action" id="LocalMarkdown-close-file" type="button">Close</button>
       </div>
@@ -99,7 +99,7 @@
         "# Markdown examples",
         "",
         "This built-in file shows common Markdown in Vditor IR mode.",
-        "Each new file asks you to choose its folder on the first manual Save. After that, changes save automatically about 700 milliseconds after you stop typing.",
+        "Local Markdown opens files individually and edits one active file at a time. Open files stay in the left sidebar. New files show Save until their first manual save; opened and saved files autosave about 700 milliseconds after you stop typing.",
         "",
         "## Inline text",
         "**Bold text**, *italic text*, ~~strikethrough~~, and `inline code`.",
@@ -177,7 +177,7 @@
         "| Align current column right | `⌘ + Shift + R` | `Ctrl + Shift + R` |",
         "",
         "## Image",
-        "Paste a clipboard image with `⌘ + V` (Mac) or `Ctrl + V` (Windows). If the file has not been saved yet, Local Markdown asks you to choose that file's folder once, then saves the image beside the Markdown file as a PNG or JPEG, using an ordered timestamp and a random suffix.",
+        "Paste a clipboard image with `⌘ + V` (Mac) or `Ctrl + V` (Windows). The first time Local Markdown needs image access, it asks you to choose the folder containing the Markdown file, then saves the image there as a PNG or JPEG with an ordered timestamp and a random suffix.",
         "",
         "Standard Markdown has no image-size syntax. Use an HTML image tag and change `width` to the size you want in pixels. If you leave out `height`, the image keeps its original proportions.",
         "",
@@ -195,10 +195,10 @@
         id: "LocalMarkdown-welcome", name: "", text: "", handle: null, directoryHandle: null,
         builtin: true, welcome: true, dirty: false
       };
-      const workspace = { activeId: example.id, files: [example] };
+      const session = { activeId: example.id, files: [example] };
 
       function activeFile() {
-        return workspace.files.find(file => file.id === workspace.activeId);
+        return session.files.find(file => file.id === session.activeId);
       }
 
       function captureEditorValue() {
@@ -216,50 +216,50 @@
       function updateStatus(message = null) {
         const file = activeFile();
         closeButton.disabled = Boolean(file.welcome);
-        saveButton.disabled = Boolean(file.welcome);
+        saveButton.hidden = Boolean(file.builtin || file.welcome || file.handle);
         if (message) statusElement.textContent = message;
-        else if (file.welcome) statusElement.textContent = "Open a folder or view Examples";
+        else if (file.welcome) statusElement.textContent = "Open a file or view Examples";
         else if (file.builtin) statusElement.textContent = "Examples";
         else statusElement.textContent = file.dirty ? "Not saved" : "Saved";
       }
 
       function renderFiles() {
         filesElement.replaceChildren();
-        for (const file of workspace.files) {
+        for (const file of session.files) {
           if (file.builtin) continue;
           const button = document.createElement("button");
           button.type = "button";
           button.className = "LocalMarkdown-file";
           button.textContent = `${file.name}${file.dirty ? " •" : ""}`;
-          button.setAttribute("aria-current", String(file.id === workspace.activeId));
+          button.setAttribute("aria-current", String(file.id === session.activeId));
           button.addEventListener("click", () => selectFile(file.id));
           filesElement.append(button);
         }
       }
 
-      function selectFile(id) {
-        if (id === workspace.activeId) return;
-        const previousId = workspace.activeId;
-        captureEditorValue();
-        releaseLocalImageUrls(previousId);
-        workspace.activeId = id;
-        if (editorReady) editor.setValue(activeFile().text, true);
+      function activateFile(file, message = null) {
+        const previous = activeFile();
+        if (previous) releaseLocalImageUrls(previous.id);
+        if (!session.files.includes(file)) session.files.push(file);
+        session.activeId = file.id;
+        if (editorReady) editor.setValue(file.text, true);
         renderFiles();
-        updateStatus();
+        updateStatus(message);
         scheduleLocalImagePreviews();
       }
 
-      function showExamples() {
-        if (workspace.activeId === example.id) return;
-        const previousId = workspace.activeId;
+      function selectFile(id) {
+        if (id === session.activeId) return;
         captureEditorValue();
-        releaseLocalImageUrls(previousId);
+        const file = session.files.find(item => item.id === id);
+        if (file) activateFile(file);
+      }
+
+      function showExamples() {
+        if (activeFile() === example) return;
+        captureEditorValue();
         example.text = exampleText;
-        if (!workspace.files.includes(example)) workspace.files.unshift(example);
-        workspace.activeId = example.id;
-        if (editorReady) editor.setValue(example.text, true);
-        renderFiles();
-        updateStatus();
+        activateFile(example);
       }
 
       function noteTitle(file) {
@@ -279,7 +279,7 @@
       }
 
       function nextUntitledName() {
-        const names = new Set(workspace.files.map(file => file.name.toLowerCase()));
+        const names = new Set(session.files.map(file => file.name.toLowerCase()));
         for (let number = 1; number <= 1000; number += 1) {
           const name = number === 1 ? "Untitled.md" : `Untitled-${number}.md`;
           if (!names.has(name.toLowerCase())) return name;
@@ -435,7 +435,7 @@
         const images = editorElement.querySelectorAll(".vditor-ir img[src], .vditor-wysiwyg img[src]");
         for (const image of images) {
           const parts = relativeImagePath(image.getAttribute("src"));
-          if (!parts || workspace.activeId !== file.id) continue;
+          if (!parts || activeFile() !== file) continue;
           const path = parts.join("/");
           const key = `${file.id}\n${path}`;
           let url = localImageUrls.get(key);
@@ -469,19 +469,19 @@
 
         const file = activeFile();
         if (file.builtin) {
-          updateStatus("Open a Markdown folder and select a file before pasting images");
+          updateStatus("Create or open a Markdown file before pasting images");
           return;
         }
         if (!file.directoryHandle) {
-          updateStatus("Choose this file's folder…");
-          const directoryHandle = await pickMarkdownDirectory();
-          if (!directoryHandle || workspace.activeId !== file.id) return;
+          updateStatus(`Choose the folder containing ${file.name}…`);
+          const directoryHandle = await pickContainingDirectory(file);
+          if (!directoryHandle || activeFile() !== file) return;
           file.directoryHandle = directoryHandle;
         }
         if (!file.handle) {
           updateStatus("Saving Markdown file…");
           await saveActiveFile();
-          if (!file.handle || workspace.activeId !== file.id) return;
+          if (!file.handle || activeFile() !== file) return;
         }
 
         const directoryHandle = file.directoryHandle;
@@ -522,11 +522,6 @@
         autoSaveTimers.delete(file.id);
       }
 
-      function cancelAllAutoSaves() {
-        for (const timer of autoSaveTimers.values()) clearTimeout(timer);
-        autoSaveTimers.clear();
-      }
-
       async function pickMarkdownDirectory() {
         if (typeof window.showDirectoryPicker !== "function") {
           updateStatus("Opening local folders requires Chrome");
@@ -534,7 +529,7 @@
         }
         try {
           return await window.showDirectoryPicker({
-            id: "LocalMarkdownWorkspace",
+            id: "LocalMarkdownFileFolder",
             mode: "readwrite"
           });
         } catch (error) {
@@ -544,12 +539,24 @@
         }
       }
 
-      async function saveWorkspaceFile(file) {
+      async function pickContainingDirectory(file) {
+        const directoryHandle = await pickMarkdownDirectory();
+        if (!directoryHandle || !file.handle) return directoryHandle;
+        try {
+          const candidate = await directoryHandle.getFileHandle(file.handle.name);
+          if (typeof file.handle.isSameEntry !== "function"
+              || await file.handle.isSameEntry(candidate)) return directoryHandle;
+        } catch {}
+        updateStatus(`Choose the folder containing ${file.name}`);
+        return null;
+      }
+
+      async function saveFile(file) {
         if (file.builtin || (!file.handle && !file.directoryHandle)) return false;
         const currentSave = activeSaves.get(file.id);
         if (currentSave) {
           if (!await currentSave) return false;
-          return file.dirty ? saveWorkspaceFile(file) : true;
+          return file.dirty ? saveFile(file) : true;
         }
 
         const directoryHandle = file.directoryHandle;
@@ -588,10 +595,10 @@
         cancelAutoSave(file);
         const timer = setTimeout(async () => {
           autoSaveTimers.delete(file.id);
-          if (!workspace.files.includes(file) || !file.dirty) return;
-          if (workspace.activeId === file.id) updateStatus("Saving…");
-          const saved = await saveWorkspaceFile(file);
-          if (workspace.activeId === file.id) {
+          if (!session.files.includes(file) || !file.dirty) return;
+          if (activeFile() === file) updateStatus("Saving…");
+          const saved = await saveFile(file);
+          if (activeFile() === file) {
             updateStatus(saved
               ? (file.dirty ? "Not saved" : "Saved automatically")
               : "Could not autosave");
@@ -605,130 +612,83 @@
       async function saveActiveFile() {
         captureEditorValue();
         const file = activeFile();
-        if (file.builtin) {
-          let handle = null;
-          if (typeof window.showSaveFilePicker === "function") {
-            try {
-              handle = await window.showSaveFilePicker({
-                suggestedName: "Markdown-examples.md",
-                types: [{ description: "Markdown file", accept: { "text/markdown": [".md"] } }]
-              });
-            } catch (error) {
-              if (error?.name === "AbortError") return;
-            }
-          }
+        if (file.builtin || file.handle) return;
 
-          if (handle) {
-            try {
-              await writeText(handle, file.text);
-              updateStatus("Example saved to file");
-              return;
-            } catch {
-              updateStatus("Could not save file");
-              return;
-            }
-          }
-
-          const url = URL.createObjectURL(new Blob([file.text], { type: "text/markdown;charset=utf-8" }));
-          const link = document.createElement("a");
-          link.href = url;
-          link.download = "Markdown-examples.md";
-          document.body.append(link);
-          link.click();
-          link.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 0);
-          updateStatus("Markdown file downloaded");
-          return;
-        }
-
-        if (!file.handle && !file.directoryHandle) {
+        if (!file.directoryHandle) {
           updateStatus("Choose this file's folder…");
           const directoryHandle = await pickMarkdownDirectory();
-          if (!directoryHandle || workspace.activeId !== file.id) return;
+          if (!directoryHandle || activeFile() !== file) return;
           file.directoryHandle = directoryHandle;
         }
         cancelAutoSave(file);
         updateStatus("Saving…");
-        const saved = await saveWorkspaceFile(file);
+        const saved = await saveFile(file);
         renderFiles();
         updateStatus(saved
           ? (file.dirty ? "Not saved" : "Saved")
           : "Could not save file");
+        if (saved && file.dirty) scheduleAutoSave(file);
       }
 
-      async function openLocalFolder() {
-        captureEditorValue();
-        const directoryHandle = await pickMarkdownDirectory();
-        if (!directoryHandle) return;
-
-        const dirtyFiles = workspace.files.filter(file => !file.builtin && file.dirty);
-        if (dirtyFiles.length) {
-          dirtyFiles.forEach(cancelAutoSave);
-          updateStatus("Saving current folder…");
-          await Promise.all(dirtyFiles.map(saveWorkspaceFile));
-          if (dirtyFiles.some(file => file.dirty)
-              && !confirm("Some changes could not be saved. Open another folder anyway?")) return;
-        }
-
-        updateStatus("Loading Markdown files…");
-        const handles = [];
-        try {
-          for await (const handle of directoryHandle.values()) {
-            if (handle.kind === "file" && /\.(?:md|markdown)$/i.test(handle.name)) {
-              handles.push(handle);
-            }
-          }
-        } catch {
-          updateStatus("Could not read folder");
+      async function openLocalFile() {
+        if (typeof window.showOpenFilePicker !== "function") {
+          updateStatus("Opening local files requires Chrome");
           return;
         }
-        handles.sort((left, right) => left.name.localeCompare(right.name, undefined, {
-          numeric: true,
-          sensitivity: "base"
-        }));
 
-        const opened = [];
-        for (const handle of handles) {
+        let handle;
+        try {
+          [handle] = await window.showOpenFilePicker({
+            multiple: false,
+            types: [{
+              description: "Markdown file",
+              accept: { "text/markdown": [".md", ".markdown"] }
+            }]
+          });
+        } catch (error) {
+          if (error?.name === "AbortError") updateStatus();
+          else updateStatus("Could not choose file");
+          return;
+        }
+
+        for (const file of session.files) {
+          if (!file.handle || typeof file.handle.isSameEntry !== "function") continue;
           try {
-            const file = await handle.getFile();
-            opened.push({
-              id: createId(), name: file.name, text: await file.text(), handle, directoryHandle,
-              builtin: false, dirty: false
-            });
+            if (await file.handle.isSameEntry(handle)) {
+              captureEditorValue();
+              activateFile(file, "File is already open");
+              return;
+            }
           } catch {}
         }
 
-        releaseLocalImageUrls();
-        cancelAllAutoSaves();
-        workspace.files = opened.length ? opened : [welcome];
-        workspace.activeId = opened[0]?.id || welcome.id;
-        if (editorReady) editor.setValue(activeFile().text, true);
-        renderFiles();
-        updateStatus(opened.length
-          ? `${directoryHandle.name} — ${opened.length} Markdown file${opened.length === 1 ? "" : "s"}`
-          : `${directoryHandle.name} — no Markdown files`);
-        scheduleLocalImagePreviews();
+        captureEditorValue();
+        updateStatus("Opening Markdown file…");
+        try {
+          const file = await handle.getFile();
+          activateFile({
+            id: createId(), name: file.name, text: await file.text(), handle,
+            directoryHandle: null, builtin: false, dirty: false
+          }, "Opened local file");
+        } catch {
+          updateStatus("Could not open file");
+        }
       }
 
       document.querySelector("#LocalMarkdown-new").addEventListener("click", () => {
         captureEditorValue();
-        releaseLocalImageUrls(workspace.activeId);
         const name = nextUntitledName();
         const file = {
           id: createId(), name, text: `# ${name.replace(/\.md$/i, "")}`,
           handle: null, directoryHandle: null,
           builtin: false, dirty: true
         };
-        workspace.files.push(file);
-        workspace.activeId = file.id;
-        if (editorReady) editor.setValue(file.text, true);
-        renderFiles();
-        updateStatus();
-        scheduleLocalImagePreviews();
+        activateFile(file);
+        editor?.focus();
       });
 
       document.querySelector("#LocalMarkdown-examples").addEventListener("click", showExamples);
-      document.querySelector("#LocalMarkdown-open-folder").addEventListener("click", openLocalFolder);
+      document.querySelector("#LocalMarkdown-open-file").addEventListener("click", openLocalFile);
       document.querySelector("#LocalMarkdown-save-file").addEventListener("click", saveActiveFile);
       editorElement.addEventListener("keydown", handleEditorKeydown, true);
       editorElement.addEventListener("paste", pasteLocalImages, true);
@@ -739,32 +699,31 @@
         if (file.welcome) return;
         if (!file.builtin && file.dirty) {
           cancelAutoSave(file);
-          updateStatus("Saving…");
-          await saveWorkspaceFile(file);
+          if (file.handle) {
+            updateStatus("Saving…");
+            await saveFile(file);
+          }
         }
         if (!file.builtin && file.dirty && !confirm(`Close “${file.name}” without saving?`)) {
           scheduleAutoSave(file);
           updateStatus();
           return;
         }
+
         cancelAutoSave(file);
         releaseLocalImageUrls(file.id);
-        workspace.files = workspace.files.filter(item => item.id !== file.id);
-        let next = workspace.files.find(item => !item.builtin) || workspace.files[0];
+        session.files = session.files.filter(item => item !== file && !item.welcome);
+        let next = session.files.find(item => !item.builtin) || session.files[0];
         if (!next) {
-          workspace.files.push(welcome);
+          session.files.push(welcome);
           next = welcome;
         }
-        workspace.activeId = next.id;
-        if (editorReady) editor.setValue(activeFile().text, true);
-        renderFiles();
-        updateStatus();
-        scheduleLocalImagePreviews();
+        activateFile(next);
       });
 
       addEventListener("beforeunload", event => {
         captureEditorValue();
-        if (!workspace.files.some(file => !file.builtin && file.dirty)) return;
+        if (!session.files.some(file => !file.builtin && file.dirty)) return;
         event.preventDefault();
         event.returnValue = "";
       });
