@@ -4,88 +4,53 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>LocalMarkdown</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vditor@3.11.2/dist/index.css">
   <style>
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
     body {
       color: #111;
       background: #fff;
-      font: 15px/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
-    button, textarea { font: inherit; }
-    button { color: inherit; background: #fff; border: 1px solid #d8d8d8; border-radius: 5px; cursor: pointer; }
+    button { color: inherit; background: #fff; border: 1px solid #d8d8d8; border-radius: 5px; font: inherit; cursor: pointer; }
     button:hover { background: #f6f6f6; }
-    button:focus-visible, textarea:focus-visible { outline: 2px solid #111; outline-offset: 2px; }
+    button:disabled { color: #aaa; cursor: default; }
+    button:focus-visible { outline: 2px solid #111; outline-offset: 2px; }
 
     .LocalMarkdown-app { height: 100%; display: grid; grid-template-columns: 220px minmax(0, 1fr); }
-    .LocalMarkdown-sidebar { min-width: 0; border-right: 1px solid #e5e5e5; overflow: auto; }
+    .LocalMarkdown-sidebar { min-width: 0; overflow: auto; border-right: 1px solid #e5e5e5; }
     .LocalMarkdown-sidebar-header,
-    .LocalMarkdown-toolbar { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid #e5e5e5; }
+    .LocalMarkdown-toolbar { height: 52px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid #e5e5e5; }
     .LocalMarkdown-sidebar-header strong { flex: 1; }
     .LocalMarkdown-new { width: 30px; height: 30px; padding: 0; font-size: 20px; line-height: 1; }
-    .LocalMarkdown-notes { padding: 8px; }
-    .LocalMarkdown-note {
+    .LocalMarkdown-files { padding: 8px; }
+    .LocalMarkdown-file {
       width: 100%; margin: 0 0 3px; padding: 8px 9px; overflow: hidden;
-      border: 0; background: #fff; text-align: left; text-overflow: ellipsis; white-space: nowrap;
+      border: 0; text-align: left; text-overflow: ellipsis; white-space: nowrap;
     }
-    .LocalMarkdown-note[aria-current="true"] { background: #f1f1f1; font-weight: 600; }
+    .LocalMarkdown-file[aria-current="true"] { background: #f1f1f1; font-weight: 600; }
 
-    .LocalMarkdown-main { min-width: 0; display: grid; grid-template-rows: 52px minmax(0, 1fr); }
+    .LocalMarkdown-main { min-width: 0; min-height: 0; display: grid; grid-template-rows: 52px minmax(0, 1fr); }
     .LocalMarkdown-toolbar { justify-content: flex-end; }
     .LocalMarkdown-status { margin-right: auto; color: #666; font-size: 13px; }
     .LocalMarkdown-action { padding: 5px 10px; }
-    .LocalMarkdown-editor-wrap { overflow: auto; }
-    .LocalMarkdown-editor { width: min(760px, 100%); min-height: 100%; margin: 0 auto; padding: 48px 40px 120px; }
-    .LocalMarkdown-line { min-height: 1.65em; padding: 1px 4px; border-radius: 3px; cursor: text; }
-    .LocalMarkdown-line:hover { background: #fafafa; }
-    .LocalMarkdown-line.is-empty::after { content: " "; white-space: pre; }
-    .LocalMarkdown-line h1,
-    .LocalMarkdown-line h2,
-    .LocalMarkdown-line h3,
-    .LocalMarkdown-line h4,
-    .LocalMarkdown-line h5,
-    .LocalMarkdown-line h6,
-    .LocalMarkdown-line p { margin: 0; }
-    .LocalMarkdown-line h1 { font-size: 2em; line-height: 1.3; }
-    .LocalMarkdown-line h2 { font-size: 1.55em; line-height: 1.35; }
-    .LocalMarkdown-line h3 { font-size: 1.25em; }
-    .LocalMarkdown-line h4,
-    .LocalMarkdown-line h5,
-    .LocalMarkdown-line h6 { font-size: 1em; }
-    .LocalMarkdown-list { display: grid; grid-template-columns: 1.2em 1fr; }
-    .LocalMarkdown-quote { padding-left: 12px; border-left: 3px solid #ccc; color: #555; }
-    .LocalMarkdown-divider { height: 1px; min-height: 1px; margin: 12px 4px; padding: 0; border: 0; background: #d8d8d8; }
-    .LocalMarkdown-line code { padding: 1px 4px; border: 1px solid #e2e2e2; border-radius: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .LocalMarkdown-line a { color: #111; text-decoration: underline; }
-    .LocalMarkdown-code-block {
-      min-height: 2em; margin: 5px 4px; padding: 10px 12px; overflow: auto;
-      border: 1px solid #d8d8d8; border-radius: 4px; white-space: pre;
-      font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    }
-    .LocalMarkdown-code-line {
-      margin: 0 4px; padding: 0 12px; border-right: 1px solid #d8d8d8;
-      border-left: 1px solid #d8d8d8; border-radius: 0; white-space: pre-wrap;
-      font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    }
-    .LocalMarkdown-line img { display: block; max-width: 100%; height: auto; margin: 8px 0; }
-    .LocalMarkdown-table { width: calc(100% - 8px); margin: 8px 4px; border-collapse: collapse; cursor: text; }
-    .LocalMarkdown-table th,
-    .LocalMarkdown-table td { padding: 6px 8px; border: 1px solid #d8d8d8; text-align: left; vertical-align: top; }
-    .LocalMarkdown-table-row { display: grid; margin: 0 4px; border: 1px solid #d8d8d8; border-bottom: 0; }
-    .LocalMarkdown-table-row:last-child { border-bottom: 1px solid #d8d8d8; }
-    .LocalMarkdown-table-cell { min-width: 0; padding: 6px 8px; border-right: 1px solid #d8d8d8; }
-    .LocalMarkdown-table-cell:last-child { border-right: 0; }
-    .LocalMarkdown-source {
-      display: block; width: 100%; min-height: 1.65em; margin: 0; padding: 1px 4px;
-      resize: none; overflow: hidden; color: #111; background: #f7f7f7;
-      border: 0; border-radius: 3px; outline: none; line-height: 1.65;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    }
+    .LocalMarkdown-editor { min-width: 0; min-height: 0; overflow: hidden; }
+
+    .LocalMarkdown-editor .vditor { height: 100% !important; border: 0; border-radius: 0; }
+    .LocalMarkdown-editor .vditor-toolbar,
+    .LocalMarkdown-editor .vditor-counter,
+    .LocalMarkdown-editor .vditor-resize { display: none !important; }
+    .LocalMarkdown-editor .vditor-content { height: 100% !important; }
+    .LocalMarkdown-editor .vditor-ir { width: min(820px, 100%); margin: 0 auto; padding: 42px 40px 120px !important; background: #fff; }
+    .LocalMarkdown-editor .vditor-reset { color: #111; font-family: inherit; }
 
     @media (max-width: 650px) {
       .LocalMarkdown-app { grid-template-columns: 150px minmax(0, 1fr); }
-      .LocalMarkdown-sidebar-header { padding: 0 9px; }
-      .LocalMarkdown-editor { padding: 30px 18px 100px; }
+      .LocalMarkdown-sidebar-header { padding: 0 8px; }
+      .LocalMarkdown-toolbar { padding: 0 8px; gap: 5px; }
+      .LocalMarkdown-action { padding: 5px 7px; }
+      .LocalMarkdown-editor .vditor-ir { padding: 28px 18px 100px !important; }
     }
   </style>
 </head>
@@ -96,64 +61,45 @@
         <strong>LocalMarkdown</strong>
         <button class="LocalMarkdown-new" id="LocalMarkdown-new" type="button" aria-label="New file">+</button>
       </div>
-      <nav class="LocalMarkdown-notes" id="LocalMarkdown-notes" aria-label="Files"></nav>
+      <nav class="LocalMarkdown-files" id="LocalMarkdown-files" aria-label="Files"></nav>
     </aside>
 
     <main class="LocalMarkdown-main">
       <div class="LocalMarkdown-toolbar">
-        <span class="LocalMarkdown-status" id="LocalMarkdown-status" role="status">Built-in example</span>
+        <span class="LocalMarkdown-status" id="LocalMarkdown-status" role="status">Loading editor…</span>
         <button class="LocalMarkdown-action" id="LocalMarkdown-open-file" type="button">Open file</button>
         <button class="LocalMarkdown-action" id="LocalMarkdown-save-file" type="button">Save</button>
         <button class="LocalMarkdown-action" id="LocalMarkdown-close-file" type="button">Close</button>
       </div>
-      <div class="LocalMarkdown-editor-wrap">
-        <section class="LocalMarkdown-editor" id="LocalMarkdown-editor" aria-label="Markdown editor"></section>
-      </div>
+      <div class="LocalMarkdown-editor" id="LocalMarkdown-editor"></div>
     </main>
   </div>
   <input id="LocalMarkdown-file-input" type="file" accept=".md,.markdown,text/markdown,text/plain" hidden>
 
+  <script src="https://cdn.jsdelivr.net/npm/vditor@3.11.2/dist/index.min.js"></script>
   <script>
     (() => {
       "use strict";
 
-      const notesElement = document.querySelector("#LocalMarkdown-notes");
-      const editorElement = document.querySelector("#LocalMarkdown-editor");
+      const vditorCdn = "https://cdn.jsdelivr.net/npm/vditor@3.11.2";
+      const filesElement = document.querySelector("#LocalMarkdown-files");
       const statusElement = document.querySelector("#LocalMarkdown-status");
       const closeButton = document.querySelector("#LocalMarkdown-close-file");
       const fileInput = document.querySelector("#LocalMarkdown-file-input");
-      let activeLine = -1;
+      let editor = null;
+      let editorReady = false;
 
-      const createId = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-      const createNote = () => ({
-        id: createId(), name: "Untitled.md", text: "# Untitled", handle: null,
-        builtin: false, dirty: true
-      });
       const exampleText = [
         "# Markdown examples",
         "",
-        "This note contains the Markdown supported by LocalMarkdown.",
-        "",
-        "## Headings",
-        "# Heading 1",
-        "## Heading 2",
-        "### Heading 3",
-        "#### Heading 4",
-        "##### Heading 5",
-        "###### Heading 6",
+        "This built-in file shows common Markdown in Vditor IR mode.",
         "",
         "## Inline text",
-        "**Bold text**",
-        "*Italic text*",
-        "~~Strikethrough text~~",
-        "Use `inline code` inside a sentence.",
-        "[OpenAI](https://openai.com)",
+        "**Bold text**, *italic text*, ~~strikethrough~~, and `inline code`.",
         "",
         "## Lists",
         "- Unordered item",
-        "- Another item",
-        "1. First ordered item",
-        "2. Second ordered item",
+        "1. Ordered item",
         "- [ ] Open task",
         "- [x] Completed task",
         "",
@@ -175,57 +121,90 @@
         "## Image",
         "![LocalMarkdown example](data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='480'%20height='140'%3E%3Crect%20x='1'%20y='1'%20width='478'%20height='138'%20fill='white'%20stroke='black'/%3E%3Ctext%20x='240'%20y='78'%20text-anchor='middle'%20font-family='sans-serif'%20font-size='22'%3ELocalMarkdown%3C/text%3E%3C/svg%3E)",
         "",
-        "## Divider",
         "---"
       ].join("\n");
+
+      const createId = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
       const example = {
         id: "LocalMarkdown-examples", name: "Markdown examples", text: exampleText,
         handle: null, builtin: true, dirty: false
       };
-      const workspace = { activeId: example.id, notes: [example] };
+      const workspace = { activeId: example.id, files: [example] };
 
-      function activeNote() {
-        return workspace.notes.find(note => note.id === workspace.activeId);
+      function activeFile() {
+        return workspace.files.find(file => file.id === workspace.activeId);
       }
 
-      function noteTitle(note) {
-        const first = note.text.split("\n").find(line => line.trim()) || "Untitled";
-        return first.replace(/^#{1,6}\s+/, "").replace(/^[-*]>?\s+/, "").trim() || "Untitled";
+      function captureEditorValue() {
+        if (!editorReady) return;
+        const file = activeFile();
+        const value = editor.getValue();
+        if (value === file.text) return;
+        file.text = value;
+        if (!file.builtin) file.dirty = true;
       }
 
-      function noteFileName(note) {
-        const preferredName = note.name && note.name !== "Untitled.md"
-          ? note.name.replace(/\.(?:md|markdown)$/i, "")
-          : noteTitle(note);
-        const safeTitle = preferredName
+      function updateStatus(message = null) {
+        const file = activeFile();
+        closeButton.disabled = file.builtin;
+        if (message) statusElement.textContent = message;
+        else if (file.builtin) statusElement.textContent = "Built-in example";
+        else statusElement.textContent = file.dirty ? "Not saved" : "Saved";
+      }
+
+      function renderFiles() {
+        filesElement.replaceChildren();
+        for (const file of workspace.files) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "LocalMarkdown-file";
+          button.textContent = `${file.name}${file.dirty ? " •" : ""}`;
+          button.setAttribute("aria-current", String(file.id === workspace.activeId));
+          button.addEventListener("click", () => selectFile(file.id));
+          filesElement.append(button);
+        }
+      }
+
+      function selectFile(id) {
+        if (id === workspace.activeId) return;
+        captureEditorValue();
+        workspace.activeId = id;
+        if (editorReady) editor.setValue(activeFile().text, true);
+        renderFiles();
+        updateStatus();
+      }
+
+      function noteTitle(file) {
+        const first = file.text.split("\n").find(line => line.trim()) || "Untitled";
+        return first.replace(/^#{1,6}\s+/, "").trim() || "Untitled";
+      }
+
+      function suggestedFileName(file) {
+        const preferred = file.name !== "Untitled.md"
+          ? file.name.replace(/\.(?:md|markdown)$/i, "")
+          : noteTitle(file);
+        const safe = preferred
           .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "-")
           .replace(/[.\s]+$/, "")
           .slice(0, 80);
-        return `${safeTitle || "Untitled"}.md`;
+        return `${safe || "Untitled"}.md`;
       }
 
-      function updateFileStatus(message = null) {
-        const note = activeNote();
-        closeButton.disabled = note.builtin;
-        if (message) statusElement.textContent = message;
-        else if (note.builtin) statusElement.textContent = "Built-in example";
-        else statusElement.textContent = note.dirty ? "Not saved" : "Saved";
-      }
-
-      async function writeNoteToHandle(note, handle) {
+      async function writeFile(file, handle) {
         const writable = await handle.createWritable();
-        await writable.write(note.text);
+        await writable.write(file.text);
         await writable.close();
       }
 
-      async function saveActiveNoteToFile() {
-        const note = activeNote();
-        let handle = note.builtin ? null : note.handle;
+      async function saveActiveFile() {
+        captureEditorValue();
+        const file = activeFile();
+        let handle = file.builtin ? null : file.handle;
 
         if (!handle && typeof window.showSaveFilePicker === "function") {
           try {
             handle = await window.showSaveFilePicker({
-              suggestedName: note.builtin ? "Markdown-examples.md" : noteFileName(note),
+              suggestedName: file.builtin ? "Markdown-examples.md" : suggestedFileName(file),
               types: [{ description: "Markdown file", accept: { "text/markdown": [".md"] } }]
             });
           } catch (error) {
@@ -235,47 +214,46 @@
 
         if (handle) {
           try {
-            await writeNoteToHandle(note, handle);
-            if (!note.builtin) {
-              note.handle = handle;
-              note.name = handle.name;
-              note.dirty = false;
+            await writeFile(file, handle);
+            if (!file.builtin) {
+              file.handle = handle;
+              file.name = handle.name;
+              file.dirty = false;
             }
-            renderNotes();
-            updateFileStatus(note.builtin ? "Example saved to file" : "Saved");
+            renderFiles();
+            updateStatus(file.builtin ? "Example saved to file" : "Saved");
             return;
           } catch {
-            updateFileStatus("Could not save file");
+            updateStatus("Could not save file");
             return;
           }
         }
 
-        const filename = note.builtin ? "Markdown-examples.md" : noteFileName(note);
-        const url = URL.createObjectURL(new Blob([note.text], { type: "text/markdown;charset=utf-8" }));
+        const url = URL.createObjectURL(new Blob([file.text], { type: "text/markdown;charset=utf-8" }));
         const link = document.createElement("a");
         link.href = url;
-        link.download = filename;
+        link.download = file.builtin ? "Markdown-examples.md" : suggestedFileName(file);
         document.body.append(link);
         link.click();
         link.remove();
         setTimeout(() => URL.revokeObjectURL(url), 0);
-        updateFileStatus("Markdown file downloaded");
+        updateStatus("Markdown file downloaded");
       }
 
       async function addOpenedFile(file, handle = null) {
         try {
-          const note = {
+          captureEditorValue();
+          const opened = {
             id: createId(), name: file.name, text: await file.text(), handle,
             builtin: false, dirty: false
           };
-          workspace.notes.push(note);
-          workspace.activeId = note.id;
-          activeLine = -1;
-          renderNotes();
-          renderEditor();
-          updateFileStatus("Opened local file");
+          workspace.files.push(opened);
+          workspace.activeId = opened.id;
+          if (editorReady) editor.setValue(opened.text, true);
+          renderFiles();
+          updateStatus("Opened local file");
         } catch {
-          updateFileStatus("Could not open file");
+          updateStatus("Could not open file");
         }
       }
 
@@ -295,407 +273,21 @@
         fileInput.click();
       }
 
-      function lines() {
-        return activeNote().text.split("\n");
-      }
-
-      function setLines(nextLines) {
-        const note = activeNote();
-        note.text = (nextLines.length ? nextLines : [""]).join("\n");
-        if (!note.builtin) note.dirty = true;
-        renderNotes();
-        updateFileStatus();
-      }
-
-      function renderNotes() {
-        notesElement.replaceChildren();
-        for (const note of workspace.notes) {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = "LocalMarkdown-note";
-          button.textContent = `${note.name}${note.dirty ? " •" : ""}`;
-          button.setAttribute("aria-current", String(note.id === workspace.activeId));
-          button.addEventListener("click", () => {
-            workspace.activeId = note.id;
-            activeLine = -1;
-            renderNotes();
-            renderEditor();
-            updateFileStatus();
-          });
-          notesElement.append(button);
-        }
-      }
-
-      function appendInlineMarkdown(parent, source) {
-        const rules = [
-          { pattern: /`([^`]+)`/, tag: "code", literal: true },
-          { pattern: /!\[([^\]]*)\]\(([^)\s]+)\)/, tag: "img", image: true },
-          { pattern: /\[([^\]]+)\]\(([^)\s]+)\)/, tag: "a", link: true },
-          { pattern: /\*\*([^*]+)\*\*/, tag: "strong" },
-          { pattern: /__([^_]+)__/, tag: "strong" },
-          { pattern: /~~([^~]+)~~/, tag: "s" },
-          { pattern: /\*([^*]+)\*/, tag: "em" },
-          { pattern: /_([^_]+)_/, tag: "em" }
-        ];
-        let winner = null;
-
-        for (const rule of rules) {
-          const match = rule.pattern.exec(source);
-          if (match && (!winner || match.index < winner.match.index)) winner = { rule, match };
-        }
-        if (!winner) {
-          parent.append(document.createTextNode(source));
-          return;
-        }
-
-        parent.append(document.createTextNode(source.slice(0, winner.match.index)));
-        const element = document.createElement(winner.rule.tag);
-        if (winner.rule.image) {
-          const url = winner.match[2];
-          if (/^(https?:|data:image\/(?:png|jpeg|gif|webp);base64,|data:image\/svg\+xml,)/i.test(url)) {
-            element.src = url;
-            element.alt = winner.match[1];
-            element.loading = "lazy";
-          } else {
-            parent.append(document.createTextNode(winner.match[1]));
-            appendInlineMarkdown(parent, source.slice(winner.match.index + winner.match[0].length));
-            return;
-          }
-        } else if (winner.rule.link) {
-          const url = winner.match[2];
-          if (/^(https?:|mailto:)/i.test(url)) {
-            element.href = url;
-            element.target = "_blank";
-            element.rel = "noopener noreferrer";
-            appendInlineMarkdown(element, winner.match[1]);
-          } else {
-            parent.append(document.createTextNode(winner.match[1]));
-            appendInlineMarkdown(parent, source.slice(winner.match.index + winner.match[0].length));
-            return;
-          }
-        } else if (winner.rule.literal) {
-          element.textContent = winner.match[1];
-        } else {
-          appendInlineMarkdown(element, winner.match[1]);
-        }
-        if (element.parentNode === null) parent.append(element);
-        appendInlineMarkdown(parent, source.slice(winner.match.index + winner.match[0].length));
-      }
-
-      function findCodeBlocks(sourceLines) {
-        const blocks = [];
-        for (let start = 0; start < sourceLines.length; start += 1) {
-          const opening = /^\s*(```|~~~)\s*([A-Za-z0-9_+-]*)\s*$/.exec(sourceLines[start]);
-          if (!opening) continue;
-          let end = start + 1;
-          while (end < sourceLines.length && sourceLines[end].trim() !== opening[1]) end += 1;
-          const closed = end < sourceLines.length;
-          if (!closed) end = sourceLines.length - 1;
-          blocks.push({ start, end, closed, language: opening[2] });
-          start = end;
-        }
-        return blocks;
-      }
-
-      function codeBlockContaining(blocks, index) {
-        return blocks.find(block => index >= block.start && index <= block.end);
-      }
-
-      function renderCodeBlock(sourceLines, block) {
-        const preview = document.createElement("pre");
-        preview.className = "LocalMarkdown-line LocalMarkdown-code-block";
-        preview.dataset.line = String(block.start);
-        if (block.language) preview.dataset.language = block.language;
-        const code = document.createElement("code");
-        const contentEnd = block.closed ? block.end : block.end + 1;
-        code.textContent = sourceLines.slice(block.start + 1, contentEnd).join("\n");
-        preview.append(code);
-        const target = block.start + 1 < contentEnd ? block.start + 1 : block.start;
-        preview.addEventListener("click", () => activateLine(target));
-        return preview;
-      }
-
-      function renderCodeLine(source, index) {
-        const line = document.createElement("pre");
-        line.className = "LocalMarkdown-line LocalMarkdown-code-line";
-        line.dataset.line = String(index);
-        line.textContent = source || " ";
-        line.addEventListener("click", () => activateLine(index));
-        return line;
-      }
-
-      function tableCells(source) {
-        const trimmed = source.trim();
-        if (!trimmed.includes("|")) return null;
-        const body = trimmed.replace(/^\|/, "").replace(/\|$/, "");
-        const cells = body.split("|").map(cell => cell.trim());
-        return cells.length > 1 ? cells : null;
-      }
-
-      function findTables(sourceLines, codeBlocks) {
-        const tables = [];
-        for (let start = 0; start < sourceLines.length - 1; start += 1) {
-          const codeBlock = codeBlockContaining(codeBlocks, start);
-          if (codeBlock) {
-            start = codeBlock.end;
-            continue;
-          }
-          const header = tableCells(sourceLines[start]);
-          const divider = tableCells(sourceLines[start + 1]);
-          if (!header || !divider || header.length !== divider.length ||
-              !divider.every(cell => /^:?-{3,}:?$/.test(cell))) continue;
-
-          let end = start + 1;
-          while (end + 1 < sourceLines.length) {
-            const row = tableCells(sourceLines[end + 1]);
-            if (!row || row.length !== header.length) break;
-            end += 1;
-          }
-          tables.push({ start, end, columns: header.length });
-          start = end;
-        }
-        return tables;
-      }
-
-      function tableContaining(tables, index) {
-        return tables.find(table => index >= table.start && index <= table.end);
-      }
-
-      function appendTableCells(row, cells, cellName) {
-        for (const source of cells) {
-          const cell = document.createElement(cellName);
-          appendInlineMarkdown(cell, source);
-          row.append(cell);
-        }
-      }
-
-      function renderTable(sourceLines, table) {
-        const element = document.createElement("table");
-        element.className = "LocalMarkdown-table";
-        const head = document.createElement("thead");
-        const headRow = document.createElement("tr");
-        appendTableCells(headRow, tableCells(sourceLines[table.start]), "th");
-        head.append(headRow);
-        element.append(head);
-
-        const body = document.createElement("tbody");
-        for (let index = table.start + 2; index <= table.end; index += 1) {
-          const row = document.createElement("tr");
-          appendTableCells(row, tableCells(sourceLines[index]), "td");
-          body.append(row);
-        }
-        element.append(body);
-        element.addEventListener("click", () => activateLine(table.start));
-        return element;
-      }
-
-      function renderTableRow(source, index, table) {
-        const row = document.createElement("div");
-        row.className = "LocalMarkdown-line LocalMarkdown-table-row";
-        row.style.gridTemplateColumns = `repeat(${table.columns}, minmax(0, 1fr))`;
-        row.dataset.line = String(index);
-        for (const sourceCell of tableCells(source)) {
-          const cell = document.createElement("div");
-          cell.className = "LocalMarkdown-table-cell";
-          if (index === table.start) {
-            const strong = document.createElement("strong");
-            appendInlineMarkdown(strong, sourceCell);
-            cell.append(strong);
-          } else {
-            appendInlineMarkdown(cell, sourceCell);
-          }
-          row.append(cell);
-        }
-        row.addEventListener("click", () => activateLine(index));
-        return row;
-      }
-
-      function renderPreviewLine(source, index) {
-        const line = document.createElement("div");
-        line.className = "LocalMarkdown-line";
-        line.dataset.line = String(index);
-        line.addEventListener("click", () => activateLine(index));
-
-        if (!source) {
-          line.classList.add("is-empty");
-          return line;
-        }
-
-        const heading = /^(#{1,6})\s+(.*)$/.exec(source);
-        const task = /^\s*[-*]\s+\[([ xX])\]\s+(.*)$/.exec(source);
-        const bullet = /^\s*[-*]\s+(.*)$/.exec(source);
-        const ordered = /^\s*(\d+)\.\s+(.*)$/.exec(source);
-        const quote = /^\s*>\s?(.*)$/.exec(source);
-        const divider = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(source);
-
-        if (heading) {
-          const element = document.createElement(`h${heading[1].length}`);
-          appendInlineMarkdown(element, heading[2]);
-          line.append(element);
-        } else if (task) {
-          line.classList.add("LocalMarkdown-list");
-          const box = document.createElement("input");
-          box.type = "checkbox";
-          box.checked = task[1].toLowerCase() === "x";
-          box.disabled = true;
-          const text = document.createElement("span");
-          appendInlineMarkdown(text, task[2]);
-          line.append(box, text);
-        } else if (bullet) {
-          line.classList.add("LocalMarkdown-list");
-          const marker = document.createElement("span");
-          marker.textContent = "•";
-          const text = document.createElement("span");
-          appendInlineMarkdown(text, bullet[1]);
-          line.append(marker, text);
-        } else if (ordered) {
-          line.classList.add("LocalMarkdown-list");
-          const marker = document.createElement("span");
-          marker.textContent = `${ordered[1]}.`;
-          const text = document.createElement("span");
-          appendInlineMarkdown(text, ordered[2]);
-          line.append(marker, text);
-        } else if (quote) {
-          line.classList.add("LocalMarkdown-quote");
-          appendInlineMarkdown(line, quote[1]);
-        } else if (divider) {
-          line.classList.add("LocalMarkdown-divider");
-        } else {
-          const paragraph = document.createElement("p");
-          appendInlineMarkdown(paragraph, source);
-          line.append(paragraph);
-        }
-        return line;
-      }
-
-      function resizeSource(source) {
-        source.style.height = "0";
-        source.style.height = `${source.scrollHeight}px`;
-      }
-
-      function renderEditor(caret = null) {
-        editorElement.replaceChildren();
-        const currentLines = lines();
-        const codeBlocks = findCodeBlocks(currentLines);
-        const tables = findTables(currentLines, codeBlocks);
-
-        for (let index = 0; index < currentLines.length; index += 1) {
-          const source = currentLines[index];
-          const codeBlock = codeBlockContaining(codeBlocks, index);
-          const codeBlockIsActive = codeBlock && activeLine >= codeBlock.start && activeLine <= codeBlock.end;
-          const table = tableContaining(tables, index);
-          const tableIsActive = table && activeLine >= table.start && activeLine <= table.end;
-
-          if (codeBlock && index === codeBlock.start && !codeBlockIsActive) {
-            editorElement.append(renderCodeBlock(currentLines, codeBlock));
-            index = codeBlock.end;
-            continue;
-          }
-
-          if (table && index === table.start && !tableIsActive) {
-            editorElement.append(renderTable(currentLines, table));
-            index = table.end;
-            continue;
-          }
-
-          if (index !== activeLine) {
-            const isFenceMarker = codeBlock && (index === codeBlock.start || (codeBlock.closed && index === codeBlock.end));
-            if (!isFenceMarker) {
-              if (codeBlock) {
-                editorElement.append(renderCodeLine(source, index));
-              } else if (table) {
-                if (index !== table.start + 1) editorElement.append(renderTableRow(source, index, table));
-              } else {
-                editorElement.append(renderPreviewLine(source, index));
-              }
-            }
-            continue;
-          }
-
-          const input = document.createElement("textarea");
-          input.className = "LocalMarkdown-source";
-          input.value = source;
-          input.rows = 1;
-          input.spellcheck = true;
-          input.setAttribute("aria-label", `Edit line ${index + 1}`);
-
-          input.addEventListener("input", () => {
-            const next = lines();
-            next[index] = input.value;
-            setLines(next);
-            resizeSource(input);
-          });
-          input.addEventListener("keydown", event => handleLineKey(event, input, index));
-          input.addEventListener("paste", event => handlePaste(event, input, index));
-          editorElement.append(input);
-
-          requestAnimationFrame(() => {
-            input.focus();
-            const position = caret === null ? input.value.length : Math.min(caret, input.value.length);
-            input.setSelectionRange(position, position);
-            resizeSource(input);
-          });
-        }
-      }
-
-      function activateLine(index, caret = null) {
-        activeLine = Math.max(0, Math.min(index, lines().length - 1));
-        renderEditor(caret);
-      }
-
-      function handleLineKey(event, input, index) {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          const next = lines();
-          const before = input.value.slice(0, input.selectionStart);
-          const after = input.value.slice(input.selectionEnd);
-          next.splice(index, 1, before, after);
-          setLines(next);
-          activeLine = index + 1;
-          renderEditor(0);
-        } else if (event.key === "ArrowUp" && index > 0) {
-          event.preventDefault();
-          activateLine(index - 1, input.selectionStart);
-        } else if (event.key === "ArrowDown" && index < lines().length - 1) {
-          event.preventDefault();
-          activateLine(index + 1, input.selectionStart);
-        } else if (event.key === "Backspace" && input.selectionStart === 0 && input.selectionEnd === 0 && index > 0) {
-          event.preventDefault();
-          const next = lines();
-          const previousLength = next[index - 1].length;
-          next.splice(index - 1, 2, next[index - 1] + next[index]);
-          setLines(next);
-          activeLine = index - 1;
-          renderEditor(previousLength);
-        }
-      }
-
-      function handlePaste(event, input, index) {
-        const text = event.clipboardData?.getData("text/plain") || "";
-        if (!text.includes("\n")) return;
-        event.preventDefault();
-        const pasted = text.replace(/\r\n?/g, "\n").split("\n");
-        pasted[0] = input.value.slice(0, input.selectionStart) + pasted[0];
-        pasted[pasted.length - 1] += input.value.slice(input.selectionEnd);
-        const next = lines();
-        next.splice(index, 1, ...pasted);
-        setLines(next);
-        activeLine = index + pasted.length - 1;
-        renderEditor(pasted[pasted.length - 1].length);
-      }
-
       document.querySelector("#LocalMarkdown-new").addEventListener("click", () => {
-        const note = createNote();
-        workspace.notes.push(note);
-        workspace.activeId = note.id;
-        activeLine = 0;
-        renderNotes();
-        renderEditor(2);
-        updateFileStatus();
+        captureEditorValue();
+        const file = {
+          id: createId(), name: "Untitled.md", text: "# Untitled", handle: null,
+          builtin: false, dirty: true
+        };
+        workspace.files.push(file);
+        workspace.activeId = file.id;
+        if (editorReady) editor.setValue(file.text, true);
+        renderFiles();
+        updateStatus();
       });
 
       document.querySelector("#LocalMarkdown-open-file").addEventListener("click", openLocalFile);
-      document.querySelector("#LocalMarkdown-save-file").addEventListener("click", saveActiveNoteToFile);
+      document.querySelector("#LocalMarkdown-save-file").addEventListener("click", saveActiveFile);
 
       fileInput.addEventListener("change", async () => {
         const [file] = fileInput.files;
@@ -704,33 +296,55 @@
       });
 
       closeButton.addEventListener("click", () => {
-        const note = activeNote();
-        if (note.builtin) return;
-        if (note.dirty && !confirm(`Close “${note.name}” without saving?`)) return;
-        workspace.notes = workspace.notes.filter(note => note.id !== workspace.activeId);
+        captureEditorValue();
+        const file = activeFile();
+        if (file.builtin) return;
+        if (file.dirty && !confirm(`Close “${file.name}” without saving?`)) return;
+        workspace.files = workspace.files.filter(item => item.id !== file.id);
         workspace.activeId = example.id;
-        activeLine = -1;
-        renderNotes();
-        renderEditor();
-        updateFileStatus();
-      });
-
-      document.addEventListener("focusin", event => {
-        if (!editorElement.contains(event.target) && activeLine !== -1) {
-          activeLine = -1;
-          renderEditor();
-        }
+        if (editorReady) editor.setValue(example.text, true);
+        renderFiles();
+        updateStatus();
       });
 
       addEventListener("beforeunload", event => {
-        if (!workspace.notes.some(note => !note.builtin && note.dirty)) return;
+        captureEditorValue();
+        if (!workspace.files.some(file => !file.builtin && file.dirty)) return;
         event.preventDefault();
         event.returnValue = "";
       });
 
-      renderNotes();
-      renderEditor();
-      updateFileStatus();
+      renderFiles();
+      updateStatus();
+
+      editor = new Vditor("LocalMarkdown-editor", {
+        cdn: vditorCdn,
+        mode: "ir",
+        value: example.text,
+        height: "100%",
+        minHeight: 200,
+        toolbar: [],
+        cache: { enable: false },
+        counter: { enable: false },
+        outline: { enable: false },
+        resize: { enable: false },
+        theme: "classic",
+        lang: "en_US",
+        placeholder: "Write Markdown…",
+        input(value) {
+          const file = activeFile();
+          if (value === file.text) return;
+          file.text = value;
+          if (!file.builtin) file.dirty = true;
+          renderFiles();
+          updateStatus();
+        },
+        after() {
+          editorReady = true;
+          editor.setValue(activeFile().text, true);
+          updateStatus();
+        }
+      });
     })();
   </script>
 </body>
