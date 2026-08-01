@@ -133,6 +133,18 @@ describe("LocalMarkdown release build", () => {
 });
 ```
 
+Create `tests/LocalMarkdown/setup.js` before the first Vitest run:
+
+```js
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+globalThis.requestAnimationFrame ??= (callback) => setTimeout(() => callback(performance.now()), 0);
+globalThis.cancelAnimationFrame ??= (id) => clearTimeout(id);
+```
+
 - [ ] **Step 2: Run the build contract and confirm the expected failure**
 
 Run: `npm run test:unit -- tests/LocalMarkdown/build.test.js`  
@@ -219,18 +231,6 @@ export default defineConfig({
     setupFiles: ["tests/LocalMarkdown/setup.js"]
   }
 });
-```
-
-Create `tests/LocalMarkdown/setup.js` so the configured setup file exists from the first test run:
-
-```js
-globalThis.ResizeObserver ??= class {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-};
-globalThis.requestAnimationFrame ??= (callback) => setTimeout(() => callback(performance.now()), 0);
-globalThis.cancelAnimationFrame ??= (id) => clearTimeout(id);
 ```
 
 Create `scripts/verify-LocalMarkdown-release.mjs` with an initial build-only verifier:
