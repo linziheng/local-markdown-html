@@ -33,7 +33,7 @@
     .LocalMarkdown-main { min-width: 0; display: grid; grid-template-rows: 52px minmax(0, 1fr); }
     .LocalMarkdown-toolbar { justify-content: flex-end; }
     .LocalMarkdown-status { margin-right: auto; color: #666; font-size: 13px; }
-    .LocalMarkdown-delete { padding: 5px 10px; }
+    .LocalMarkdown-action { padding: 5px 10px; }
     .LocalMarkdown-editor-wrap { overflow: auto; }
     .LocalMarkdown-editor { width: min(760px, 100%); min-height: 100%; margin: 0 auto; padding: 48px 40px 120px; }
     .LocalMarkdown-line { min-height: 1.65em; padding: 1px 4px; border-radius: 3px; cursor: text; }
@@ -91,39 +91,44 @@
 </head>
 <body>
   <div class="LocalMarkdown-app">
-    <aside class="LocalMarkdown-sidebar" aria-label="LocalMarkdown notes">
+    <aside class="LocalMarkdown-sidebar" aria-label="LocalMarkdown files">
       <div class="LocalMarkdown-sidebar-header">
         <strong>LocalMarkdown</strong>
-        <button class="LocalMarkdown-new" id="LocalMarkdown-new" type="button" aria-label="New note">+</button>
+        <button class="LocalMarkdown-new" id="LocalMarkdown-new" type="button" aria-label="New file">+</button>
       </div>
-      <nav class="LocalMarkdown-notes" id="LocalMarkdown-notes" aria-label="Notes"></nav>
+      <nav class="LocalMarkdown-notes" id="LocalMarkdown-notes" aria-label="Files"></nav>
     </aside>
 
     <main class="LocalMarkdown-main">
       <div class="LocalMarkdown-toolbar">
-        <span class="LocalMarkdown-status" id="LocalMarkdown-status" role="status">Saved</span>
-        <button class="LocalMarkdown-delete" id="LocalMarkdown-save-file" type="button">Save file</button>
-        <button class="LocalMarkdown-delete" id="LocalMarkdown-delete" type="button">Delete</button>
+        <span class="LocalMarkdown-status" id="LocalMarkdown-status" role="status">Built-in example</span>
+        <button class="LocalMarkdown-action" id="LocalMarkdown-open-file" type="button">Open file</button>
+        <button class="LocalMarkdown-action" id="LocalMarkdown-save-file" type="button">Save</button>
+        <button class="LocalMarkdown-action" id="LocalMarkdown-close-file" type="button">Close</button>
       </div>
       <div class="LocalMarkdown-editor-wrap">
         <section class="LocalMarkdown-editor" id="LocalMarkdown-editor" aria-label="Markdown editor"></section>
       </div>
     </main>
   </div>
+  <input id="LocalMarkdown-file-input" type="file" accept=".md,.markdown,text/markdown,text/plain" hidden>
 
   <script>
     (() => {
       "use strict";
 
-      const storageKey = "LocalMarkdown";
       const notesElement = document.querySelector("#LocalMarkdown-notes");
       const editorElement = document.querySelector("#LocalMarkdown-editor");
       const statusElement = document.querySelector("#LocalMarkdown-status");
+      const closeButton = document.querySelector("#LocalMarkdown-close-file");
+      const fileInput = document.querySelector("#LocalMarkdown-file-input");
       let activeLine = -1;
-      let saveTimer = 0;
 
       const createId = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-      const createNote = () => ({ id: createId(), text: "# Untitled", updatedAt: Date.now() });
+      const createNote = () => ({
+        id: createId(), name: "Untitled.md", text: "# Untitled", handle: null,
+        builtin: false, dirty: true
+      });
       const exampleText = [
         "# Markdown examples",
         "",
@@ -173,37 +178,11 @@
         "## Divider",
         "---"
       ].join("\n");
-      const examplesVersion = 2;
-      const createExampleNote = () => ({ id: createId(), text: exampleText, updatedAt: Date.now() });
-
-      function loadWorkspace() {
-        try {
-          const value = JSON.parse(localStorage.getItem(storageKey));
-          if (value && Array.isArray(value.notes) && value.notes.length && value.notes.every(note =>
-            typeof note.id === "string" && typeof note.text === "string")) {
-            if (value.examplesVersion !== examplesVersion) {
-              const notes = [...value.notes];
-              const existingIndex = notes.findIndex(note => note.text.startsWith("# Markdown examples"));
-              const example = existingIndex >= 0
-                ? { ...notes[existingIndex], text: exampleText, updatedAt: Date.now() }
-                : createExampleNote();
-              if (existingIndex >= 0) notes[existingIndex] = example;
-              else notes.push(example);
-              return { activeId: example.id, notes, examplesAdded: true, examplesVersion };
-            }
-            return {
-              activeId: value.notes.some(note => note.id === value.activeId) ? value.activeId : value.notes[0].id,
-              notes: value.notes,
-              examplesAdded: true,
-              examplesVersion
-            };
-          }
-        } catch {}
-        const example = createExampleNote();
-        return { activeId: example.id, notes: [example], examplesAdded: true, examplesVersion };
-      }
-
-      let workspace = loadWorkspace();
+      const example = {
+        id: "LocalMarkdown-examples", name: "Markdown examples", text: exampleText,
+        handle: null, builtin: true, dirty: false
+      };
+      const workspace = { activeId: example.id, notes: [example] };
 
       function activeNote() {
         return workspace.notes.find(note => note.id === workspace.activeId);
@@ -215,33 +194,63 @@
       }
 
       function noteFileName(note) {
-        const safeTitle = noteTitle(note)
+        const preferredName = note.name && note.name !== "Untitled.md"
+          ? note.name.replace(/\.(?:md|markdown)$/i, "")
+          : noteTitle(note);
+        const safeTitle = preferredName
           .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "-")
           .replace(/[.\s]+$/, "")
           .slice(0, 80);
         return `${safeTitle || "Untitled"}.md`;
       }
 
+      function updateFileStatus(message = null) {
+        const note = activeNote();
+        closeButton.disabled = note.builtin;
+        if (message) statusElement.textContent = message;
+        else if (note.builtin) statusElement.textContent = "Built-in example";
+        else statusElement.textContent = note.dirty ? "Not saved" : "Saved";
+      }
+
+      async function writeNoteToHandle(note, handle) {
+        const writable = await handle.createWritable();
+        await writable.write(note.text);
+        await writable.close();
+      }
+
       async function saveActiveNoteToFile() {
         const note = activeNote();
-        const filename = noteFileName(note);
+        let handle = note.builtin ? null : note.handle;
 
-        if (typeof window.showSaveFilePicker === "function") {
+        if (!handle && typeof window.showSaveFilePicker === "function") {
           try {
-            const handle = await window.showSaveFilePicker({
-              suggestedName: filename,
+            handle = await window.showSaveFilePicker({
+              suggestedName: note.builtin ? "Markdown-examples.md" : noteFileName(note),
               types: [{ description: "Markdown file", accept: { "text/markdown": [".md"] } }]
             });
-            const writable = await handle.createWritable();
-            await writable.write(note.text);
-            await writable.close();
-            statusElement.textContent = "Saved to file";
-            return;
           } catch (error) {
             if (error?.name === "AbortError") return;
           }
         }
 
+        if (handle) {
+          try {
+            await writeNoteToHandle(note, handle);
+            if (!note.builtin) {
+              note.handle = handle;
+              note.name = handle.name;
+              note.dirty = false;
+            }
+            renderNotes();
+            updateFileStatus(note.builtin ? "Example saved to file" : "Saved");
+            return;
+          } catch {
+            updateFileStatus("Could not save file");
+            return;
+          }
+        }
+
+        const filename = note.builtin ? "Markdown-examples.md" : noteFileName(note);
         const url = URL.createObjectURL(new Blob([note.text], { type: "text/markdown;charset=utf-8" }));
         const link = document.createElement("a");
         link.href = url;
@@ -250,20 +259,40 @@
         link.click();
         link.remove();
         setTimeout(() => URL.revokeObjectURL(url), 0);
-        statusElement.textContent = "Markdown file downloaded";
+        updateFileStatus("Markdown file downloaded");
       }
 
-      function saveSoon() {
-        statusElement.textContent = "Saving…";
-        clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => {
+      async function addOpenedFile(file, handle = null) {
+        try {
+          const note = {
+            id: createId(), name: file.name, text: await file.text(), handle,
+            builtin: false, dirty: false
+          };
+          workspace.notes.push(note);
+          workspace.activeId = note.id;
+          activeLine = -1;
+          renderNotes();
+          renderEditor();
+          updateFileStatus("Opened local file");
+        } catch {
+          updateFileStatus("Could not open file");
+        }
+      }
+
+      async function openLocalFile() {
+        if (typeof window.showOpenFilePicker === "function") {
           try {
-            localStorage.setItem(storageKey, JSON.stringify(workspace));
-            statusElement.textContent = "Saved";
-          } catch {
-            statusElement.textContent = "Could not save";
+            const [handle] = await window.showOpenFilePicker({
+              multiple: false,
+              types: [{ description: "Markdown file", accept: { "text/markdown": [".md", ".markdown"] } }]
+            });
+            await addOpenedFile(await handle.getFile(), handle);
+            return;
+          } catch (error) {
+            if (error?.name === "AbortError") return;
           }
-        }, 150);
+        }
+        fileInput.click();
       }
 
       function lines() {
@@ -273,25 +302,25 @@
       function setLines(nextLines) {
         const note = activeNote();
         note.text = (nextLines.length ? nextLines : [""]).join("\n");
-        note.updatedAt = Date.now();
+        if (!note.builtin) note.dirty = true;
         renderNotes();
-        saveSoon();
+        updateFileStatus();
       }
 
       function renderNotes() {
         notesElement.replaceChildren();
-        for (const note of [...workspace.notes].sort((a, b) => b.updatedAt - a.updatedAt)) {
+        for (const note of workspace.notes) {
           const button = document.createElement("button");
           button.type = "button";
           button.className = "LocalMarkdown-note";
-          button.textContent = noteTitle(note);
+          button.textContent = `${note.name}${note.dirty ? " •" : ""}`;
           button.setAttribute("aria-current", String(note.id === workspace.activeId));
           button.addEventListener("click", () => {
             workspace.activeId = note.id;
             activeLine = -1;
             renderNotes();
             renderEditor();
-            saveSoon();
+            updateFileStatus();
           });
           notesElement.append(button);
         }
@@ -662,20 +691,28 @@
         activeLine = 0;
         renderNotes();
         renderEditor(2);
-        saveSoon();
+        updateFileStatus();
       });
 
+      document.querySelector("#LocalMarkdown-open-file").addEventListener("click", openLocalFile);
       document.querySelector("#LocalMarkdown-save-file").addEventListener("click", saveActiveNoteToFile);
 
-      document.querySelector("#LocalMarkdown-delete").addEventListener("click", () => {
-        if (!confirm(`Delete “${noteTitle(activeNote())}”?`)) return;
+      fileInput.addEventListener("change", async () => {
+        const [file] = fileInput.files;
+        if (file) await addOpenedFile(file);
+        fileInput.value = "";
+      });
+
+      closeButton.addEventListener("click", () => {
+        const note = activeNote();
+        if (note.builtin) return;
+        if (note.dirty && !confirm(`Close “${note.name}” without saving?`)) return;
         workspace.notes = workspace.notes.filter(note => note.id !== workspace.activeId);
-        if (!workspace.notes.length) workspace.notes.push(createNote());
-        workspace.activeId = workspace.notes[0].id;
+        workspace.activeId = example.id;
         activeLine = -1;
         renderNotes();
         renderEditor();
-        saveSoon();
+        updateFileStatus();
       });
 
       document.addEventListener("focusin", event => {
@@ -685,9 +722,15 @@
         }
       });
 
+      addEventListener("beforeunload", event => {
+        if (!workspace.notes.some(note => !note.builtin && note.dirty)) return;
+        event.preventDefault();
+        event.returnValue = "";
+      });
+
       renderNotes();
       renderEditor();
-      saveSoon();
+      updateFileStatus();
     })();
   </script>
 </body>
