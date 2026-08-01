@@ -177,7 +177,7 @@
         "| Align current column right | `⌘ + Shift + R` | `Ctrl + Shift + R` |",
         "",
         "## Image",
-        "Open a folder, then paste a clipboard image with `⌘ + V` (Mac) or `Ctrl + V` (Windows). Local Markdown saves it beside the active Markdown file as a PNG or JPEG, using an ordered timestamp and a random suffix.",
+        "Paste a clipboard image with `⌘ + V` (Mac) or `Ctrl + V` (Windows). If needed, Local Markdown asks you to choose the Markdown folder once, then saves the image beside the active Markdown file as a PNG or JPEG, using an ordered timestamp and a random suffix.",
         "",
         "Standard Markdown has no image-size syntax. Use an HTML image tag and change `width` to the size you want in pixels. If you leave out `height`, the image keeps its original proportions.",
         "",
@@ -473,8 +473,10 @@
           return;
         }
         if (!workspace.directoryHandle) {
-          updateStatus("Open the Markdown folder before pasting images");
-          return;
+          updateStatus("Choose the Markdown folder…");
+          const directoryHandle = await pickMarkdownDirectory();
+          if (!directoryHandle || workspace.activeId !== file.id) return;
+          workspace.directoryHandle = directoryHandle;
         }
         if (!file.handle) {
           updateStatus("Saving Markdown file…");
@@ -523,6 +525,23 @@
       function cancelAllAutoSaves() {
         for (const timer of autoSaveTimers.values()) clearTimeout(timer);
         autoSaveTimers.clear();
+      }
+
+      async function pickMarkdownDirectory() {
+        if (typeof window.showDirectoryPicker !== "function") {
+          updateStatus("Opening local folders requires Chrome");
+          return null;
+        }
+        try {
+          return await window.showDirectoryPicker({
+            id: "LocalMarkdownWorkspace",
+            mode: "readwrite"
+          });
+        } catch (error) {
+          if (error?.name === "AbortError") updateStatus();
+          else updateStatus("Could not choose folder");
+          return null;
+        }
       }
 
       async function saveWorkspaceFile(file) {
@@ -623,21 +642,10 @@
         }
 
         if (!file.handle && !workspace.directoryHandle) {
-          if (typeof window.showSaveFilePicker !== "function") {
-            updateStatus("Saving local files requires Chrome");
-            return;
-          }
-          try {
-            file.handle = await window.showSaveFilePicker({
-              suggestedName: suggestedFileName(file),
-              types: [{ description: "Markdown file", accept: { "text/markdown": [".md"] } }]
-            });
-            file.name = file.handle.name;
-          } catch (error) {
-            if (error?.name === "AbortError") updateStatus();
-            else updateStatus("Could not choose a file");
-            return;
-          }
+          updateStatus("Choose the Markdown folder…");
+          const directoryHandle = await pickMarkdownDirectory();
+          if (!directoryHandle || workspace.activeId !== file.id) return;
+          workspace.directoryHandle = directoryHandle;
         }
         cancelAutoSave(file);
         updateStatus("Saving…");
@@ -649,23 +657,9 @@
       }
 
       async function openLocalFolder() {
-        if (typeof window.showDirectoryPicker !== "function") {
-          updateStatus("Opening local folders requires Chrome");
-          return;
-        }
-
         captureEditorValue();
-        let directoryHandle;
-        try {
-          directoryHandle = await window.showDirectoryPicker({
-            id: "LocalMarkdownWorkspace",
-            mode: "readwrite"
-          });
-        } catch (error) {
-          if (error?.name === "AbortError") return;
-          updateStatus("Could not open folder");
-          return;
-        }
+        const directoryHandle = await pickMarkdownDirectory();
+        if (!directoryHandle) return;
 
         const dirtyFiles = workspace.files.filter(file => !file.builtin && file.dirty);
         if (dirtyFiles.length) {

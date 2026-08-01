@@ -18,13 +18,13 @@ Local Markdown is a lightweight, zero-install Markdown workspace for everyday no
 2. Put `dog.png` beside `local-markdown.html` to display the current image example.
 3. Open `local-markdown.html` in Chrome.
 4. Select **Open folder** and choose the folder containing your Markdown files.
-5. Select **+** to create a note. Use **Save** once to create the file; later changes save automatically.
+5. Select **+** to create a note. Use **Save** once; if no folder is open yet, choose its Markdown folder when prompted. Later changes save automatically.
 
 Local Markdown asks Chrome for access only to the folder you select. Your Markdown files and pasted images remain local.
 
 ## Pasting images
 
-Open a folder and select a Markdown file before pasting an image. Local Markdown saves the image in that folder and inserts a relative Markdown image link. Filenames begin with a timestamp so earlier images sort before later images.
+Paste an image into a note. If no folder is open yet, Local Markdown asks you to choose the Markdown folder once. It saves the Markdown file and image in that folder, then inserts a relative Markdown image link. Filenames begin with a timestamp so earlier images sort before later images.
 
 ## Browser and network requirements
 
