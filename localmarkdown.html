@@ -67,6 +67,14 @@
       border-left: 1px solid #d8d8d8; border-radius: 0; white-space: pre-wrap;
       font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
+    .LocalMarkdown-line img { display: block; max-width: 100%; height: auto; margin: 8px 0; }
+    .LocalMarkdown-table { width: calc(100% - 8px); margin: 8px 4px; border-collapse: collapse; cursor: text; }
+    .LocalMarkdown-table th,
+    .LocalMarkdown-table td { padding: 6px 8px; border: 1px solid #d8d8d8; text-align: left; vertical-align: top; }
+    .LocalMarkdown-table-row { display: grid; margin: 0 4px; border: 1px solid #d8d8d8; border-bottom: 0; }
+    .LocalMarkdown-table-row:last-child { border-bottom: 1px solid #d8d8d8; }
+    .LocalMarkdown-table-cell { min-width: 0; padding: 6px 8px; border-right: 1px solid #d8d8d8; }
+    .LocalMarkdown-table-cell:last-child { border-right: 0; }
     .LocalMarkdown-source {
       display: block; width: 100%; min-height: 1.65em; margin: 0; padding: 1px 4px;
       resize: none; overflow: hidden; color: #111; background: #f7f7f7;
@@ -153,9 +161,19 @@
         "console.log(message);",
         "```",
         "",
+        "## Table",
+        "| Feature | Example |",
+        "| --- | --- |",
+        "| Heading | # Title |",
+        "| Task | - [ ] Todo |",
+        "",
+        "## Image",
+        "![LocalMarkdown example](data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='480'%20height='140'%3E%3Crect%20x='1'%20y='1'%20width='478'%20height='138'%20fill='white'%20stroke='black'/%3E%3Ctext%20x='240'%20y='78'%20text-anchor='middle'%20font-family='sans-serif'%20font-size='22'%3ELocalMarkdown%3C/text%3E%3C/svg%3E)",
+        "",
         "## Divider",
         "---"
       ].join("\n");
+      const examplesVersion = 2;
       const createExampleNote = () => ({ id: createId(), text: exampleText, updatedAt: Date.now() });
 
       function loadWorkspace() {
@@ -163,19 +181,26 @@
           const value = JSON.parse(localStorage.getItem(storageKey));
           if (value && Array.isArray(value.notes) && value.notes.length && value.notes.every(note =>
             typeof note.id === "string" && typeof note.text === "string")) {
-            if (!value.examplesAdded) {
-              const example = createExampleNote();
-              return { activeId: example.id, notes: [...value.notes, example], examplesAdded: true };
+            if (value.examplesVersion !== examplesVersion) {
+              const notes = [...value.notes];
+              const existingIndex = notes.findIndex(note => note.text.startsWith("# Markdown examples"));
+              const example = existingIndex >= 0
+                ? { ...notes[existingIndex], text: exampleText, updatedAt: Date.now() }
+                : createExampleNote();
+              if (existingIndex >= 0) notes[existingIndex] = example;
+              else notes.push(example);
+              return { activeId: example.id, notes, examplesAdded: true, examplesVersion };
             }
             return {
               activeId: value.notes.some(note => note.id === value.activeId) ? value.activeId : value.notes[0].id,
               notes: value.notes,
-              examplesAdded: true
+              examplesAdded: true,
+              examplesVersion
             };
           }
         } catch {}
         const example = createExampleNote();
-        return { activeId: example.id, notes: [example], examplesAdded: true };
+        return { activeId: example.id, notes: [example], examplesAdded: true, examplesVersion };
       }
 
       let workspace = loadWorkspace();
@@ -275,6 +300,7 @@
       function appendInlineMarkdown(parent, source) {
         const rules = [
           { pattern: /`([^`]+)`/, tag: "code", literal: true },
+          { pattern: /!\[([^\]]*)\]\(([^)\s]+)\)/, tag: "img", image: true },
           { pattern: /\[([^\]]+)\]\(([^)\s]+)\)/, tag: "a", link: true },
           { pattern: /\*\*([^*]+)\*\*/, tag: "strong" },
           { pattern: /__([^_]+)__/, tag: "strong" },
@@ -295,7 +321,18 @@
 
         parent.append(document.createTextNode(source.slice(0, winner.match.index)));
         const element = document.createElement(winner.rule.tag);
-        if (winner.rule.link) {
+        if (winner.rule.image) {
+          const url = winner.match[2];
+          if (/^(https?:|data:image\/(?:png|jpeg|gif|webp);base64,|data:image\/svg\+xml,)/i.test(url)) {
+            element.src = url;
+            element.alt = winner.match[1];
+            element.loading = "lazy";
+          } else {
+            parent.append(document.createTextNode(winner.match[1]));
+            appendInlineMarkdown(parent, source.slice(winner.match.index + winner.match[0].length));
+            return;
+          }
+        } else if (winner.rule.link) {
           const url = winner.match[2];
           if (/^(https?:|mailto:)/i.test(url)) {
             element.href = url;
@@ -356,6 +393,92 @@
         line.textContent = source || " ";
         line.addEventListener("click", () => activateLine(index));
         return line;
+      }
+
+      function tableCells(source) {
+        const trimmed = source.trim();
+        if (!trimmed.includes("|")) return null;
+        const body = trimmed.replace(/^\|/, "").replace(/\|$/, "");
+        const cells = body.split("|").map(cell => cell.trim());
+        return cells.length > 1 ? cells : null;
+      }
+
+      function findTables(sourceLines, codeBlocks) {
+        const tables = [];
+        for (let start = 0; start < sourceLines.length - 1; start += 1) {
+          const codeBlock = codeBlockContaining(codeBlocks, start);
+          if (codeBlock) {
+            start = codeBlock.end;
+            continue;
+          }
+          const header = tableCells(sourceLines[start]);
+          const divider = tableCells(sourceLines[start + 1]);
+          if (!header || !divider || header.length !== divider.length ||
+              !divider.every(cell => /^:?-{3,}:?$/.test(cell))) continue;
+
+          let end = start + 1;
+          while (end + 1 < sourceLines.length) {
+            const row = tableCells(sourceLines[end + 1]);
+            if (!row || row.length !== header.length) break;
+            end += 1;
+          }
+          tables.push({ start, end, columns: header.length });
+          start = end;
+        }
+        return tables;
+      }
+
+      function tableContaining(tables, index) {
+        return tables.find(table => index >= table.start && index <= table.end);
+      }
+
+      function appendTableCells(row, cells, cellName) {
+        for (const source of cells) {
+          const cell = document.createElement(cellName);
+          appendInlineMarkdown(cell, source);
+          row.append(cell);
+        }
+      }
+
+      function renderTable(sourceLines, table) {
+        const element = document.createElement("table");
+        element.className = "LocalMarkdown-table";
+        const head = document.createElement("thead");
+        const headRow = document.createElement("tr");
+        appendTableCells(headRow, tableCells(sourceLines[table.start]), "th");
+        head.append(headRow);
+        element.append(head);
+
+        const body = document.createElement("tbody");
+        for (let index = table.start + 2; index <= table.end; index += 1) {
+          const row = document.createElement("tr");
+          appendTableCells(row, tableCells(sourceLines[index]), "td");
+          body.append(row);
+        }
+        element.append(body);
+        element.addEventListener("click", () => activateLine(table.start));
+        return element;
+      }
+
+      function renderTableRow(source, index, table) {
+        const row = document.createElement("div");
+        row.className = "LocalMarkdown-line LocalMarkdown-table-row";
+        row.style.gridTemplateColumns = `repeat(${table.columns}, minmax(0, 1fr))`;
+        row.dataset.line = String(index);
+        for (const sourceCell of tableCells(source)) {
+          const cell = document.createElement("div");
+          cell.className = "LocalMarkdown-table-cell";
+          if (index === table.start) {
+            const strong = document.createElement("strong");
+            appendInlineMarkdown(strong, sourceCell);
+            cell.append(strong);
+          } else {
+            appendInlineMarkdown(cell, sourceCell);
+          }
+          row.append(cell);
+        }
+        row.addEventListener("click", () => activateLine(index));
+        return row;
       }
 
       function renderPreviewLine(source, index) {
@@ -425,11 +548,14 @@
         editorElement.replaceChildren();
         const currentLines = lines();
         const codeBlocks = findCodeBlocks(currentLines);
+        const tables = findTables(currentLines, codeBlocks);
 
         for (let index = 0; index < currentLines.length; index += 1) {
           const source = currentLines[index];
           const codeBlock = codeBlockContaining(codeBlocks, index);
           const codeBlockIsActive = codeBlock && activeLine >= codeBlock.start && activeLine <= codeBlock.end;
+          const table = tableContaining(tables, index);
+          const tableIsActive = table && activeLine >= table.start && activeLine <= table.end;
 
           if (codeBlock && index === codeBlock.start && !codeBlockIsActive) {
             editorElement.append(renderCodeBlock(currentLines, codeBlock));
@@ -437,10 +563,22 @@
             continue;
           }
 
+          if (table && index === table.start && !tableIsActive) {
+            editorElement.append(renderTable(currentLines, table));
+            index = table.end;
+            continue;
+          }
+
           if (index !== activeLine) {
             const isFenceMarker = codeBlock && (index === codeBlock.start || (codeBlock.closed && index === codeBlock.end));
             if (!isFenceMarker) {
-              editorElement.append(codeBlock ? renderCodeLine(source, index) : renderPreviewLine(source, index));
+              if (codeBlock) {
+                editorElement.append(renderCodeLine(source, index));
+              } else if (table) {
+                if (index !== table.start + 1) editorElement.append(renderTableRow(source, index, table));
+              } else {
+                editorElement.append(renderPreviewLine(source, index));
+              }
             }
             continue;
           }
