@@ -99,7 +99,7 @@
         "# Markdown examples",
         "",
         "This built-in file shows common Markdown in Vditor IR mode.",
-        "New files wait for their first manual Save. After that, changes save automatically about 700 milliseconds after you stop typing.",
+        "Each new file asks you to choose its folder on the first manual Save. After that, changes save automatically about 700 milliseconds after you stop typing.",
         "",
         "## Inline text",
         "**Bold text**, *italic text*, ~~strikethrough~~, and `inline code`.",
@@ -177,7 +177,7 @@
         "| Align current column right | `⌘ + Shift + R` | `Ctrl + Shift + R` |",
         "",
         "## Image",
-        "Paste a clipboard image with `⌘ + V` (Mac) or `Ctrl + V` (Windows). If needed, Local Markdown asks you to choose the Markdown folder once, then saves the image beside the active Markdown file as a PNG or JPEG, using an ordered timestamp and a random suffix.",
+        "Paste a clipboard image with `⌘ + V` (Mac) or `Ctrl + V` (Windows). If the file has not been saved yet, Local Markdown asks you to choose that file's folder once, then saves the image beside the Markdown file as a PNG or JPEG, using an ordered timestamp and a random suffix.",
         "",
         "Standard Markdown has no image-size syntax. Use an HTML image tag and change `width` to the size you want in pixels. If you leave out `height`, the image keeps its original proportions.",
         "",
@@ -189,13 +189,13 @@
       const createId = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
       const example = {
         id: "LocalMarkdown-examples", name: "Markdown examples", text: exampleText,
-        handle: null, builtin: true, dirty: false
+        handle: null, directoryHandle: null, builtin: true, dirty: false
       };
       const welcome = {
-        id: "LocalMarkdown-welcome", name: "", text: "", handle: null,
+        id: "LocalMarkdown-welcome", name: "", text: "", handle: null, directoryHandle: null,
         builtin: true, welcome: true, dirty: false
       };
-      const workspace = { activeId: example.id, directoryHandle: null, files: [example] };
+      const workspace = { activeId: example.id, files: [example] };
 
       function activeFile() {
         return workspace.files.find(file => file.id === workspace.activeId);
@@ -431,7 +431,7 @@
       async function refreshLocalImagePreviews() {
         if (!editorReady) return;
         const file = activeFile();
-        if (file.builtin || !workspace.directoryHandle) return;
+        if (file.builtin || !file.directoryHandle) return;
         const images = editorElement.querySelectorAll(".vditor-ir img[src], .vditor-wysiwyg img[src]");
         for (const image of images) {
           const parts = relativeImagePath(image.getAttribute("src"));
@@ -441,7 +441,7 @@
           let url = localImageUrls.get(key);
           if (!url) {
             try {
-              const handle = await fileHandleAtPath(workspace.directoryHandle, parts);
+              const handle = await fileHandleAtPath(file.directoryHandle, parts);
               url = URL.createObjectURL(await handle.getFile());
               localImageUrls.set(key, url);
             } catch {
@@ -472,11 +472,11 @@
           updateStatus("Open a Markdown folder and select a file before pasting images");
           return;
         }
-        if (!workspace.directoryHandle) {
-          updateStatus("Choose the Markdown folder…");
+        if (!file.directoryHandle) {
+          updateStatus("Choose this file's folder…");
           const directoryHandle = await pickMarkdownDirectory();
           if (!directoryHandle || workspace.activeId !== file.id) return;
-          workspace.directoryHandle = directoryHandle;
+          file.directoryHandle = directoryHandle;
         }
         if (!file.handle) {
           updateStatus("Saving Markdown file…");
@@ -484,7 +484,7 @@
           if (!file.handle || workspace.activeId !== file.id) return;
         }
 
-        const directoryHandle = workspace.directoryHandle;
+        const directoryHandle = file.directoryHandle;
         updateStatus(images.length === 1 ? "Saving pasted image…" : `Saving ${images.length} pasted images…`);
 
         const names = [];
@@ -545,14 +545,14 @@
       }
 
       async function saveWorkspaceFile(file) {
-        if (file.builtin || (!file.handle && !workspace.directoryHandle)) return false;
+        if (file.builtin || (!file.handle && !file.directoryHandle)) return false;
         const currentSave = activeSaves.get(file.id);
         if (currentSave) {
           if (!await currentSave) return false;
           return file.dirty ? saveWorkspaceFile(file) : true;
         }
 
-        const directoryHandle = workspace.directoryHandle;
+        const directoryHandle = file.directoryHandle;
         const operation = (async () => {
           const text = file.text;
           let handle = file.handle;
@@ -641,11 +641,11 @@
           return;
         }
 
-        if (!file.handle && !workspace.directoryHandle) {
-          updateStatus("Choose the Markdown folder…");
+        if (!file.handle && !file.directoryHandle) {
+          updateStatus("Choose this file's folder…");
           const directoryHandle = await pickMarkdownDirectory();
           if (!directoryHandle || workspace.activeId !== file.id) return;
-          workspace.directoryHandle = directoryHandle;
+          file.directoryHandle = directoryHandle;
         }
         cancelAutoSave(file);
         updateStatus("Saving…");
@@ -692,7 +692,7 @@
           try {
             const file = await handle.getFile();
             opened.push({
-              id: createId(), name: file.name, text: await file.text(), handle,
+              id: createId(), name: file.name, text: await file.text(), handle, directoryHandle,
               builtin: false, dirty: false
             });
           } catch {}
@@ -700,7 +700,6 @@
 
         releaseLocalImageUrls();
         cancelAllAutoSaves();
-        workspace.directoryHandle = directoryHandle;
         workspace.files = opened.length ? opened : [welcome];
         workspace.activeId = opened[0]?.id || welcome.id;
         if (editorReady) editor.setValue(activeFile().text, true);
@@ -716,7 +715,8 @@
         releaseLocalImageUrls(workspace.activeId);
         const name = nextUntitledName();
         const file = {
-          id: createId(), name, text: `# ${name.replace(/\.md$/i, "")}`, handle: null,
+          id: createId(), name, text: `# ${name.replace(/\.md$/i, "")}`,
+          handle: null, directoryHandle: null,
           builtin: false, dirty: true
         };
         workspace.files.push(file);
