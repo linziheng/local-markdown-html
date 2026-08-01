@@ -94,6 +94,7 @@
     <main class="LocalMarkdown-main">
       <div class="LocalMarkdown-toolbar">
         <span class="LocalMarkdown-status" id="LocalMarkdown-status" role="status">Saved</span>
+        <button class="LocalMarkdown-delete" id="LocalMarkdown-save-file" type="button">Save file</button>
         <button class="LocalMarkdown-delete" id="LocalMarkdown-delete" type="button">Delete</button>
       </div>
       <div class="LocalMarkdown-editor-wrap">
@@ -186,6 +187,45 @@
       function noteTitle(note) {
         const first = note.text.split("\n").find(line => line.trim()) || "Untitled";
         return first.replace(/^#{1,6}\s+/, "").replace(/^[-*]>?\s+/, "").trim() || "Untitled";
+      }
+
+      function noteFileName(note) {
+        const safeTitle = noteTitle(note)
+          .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "-")
+          .replace(/[.\s]+$/, "")
+          .slice(0, 80);
+        return `${safeTitle || "Untitled"}.md`;
+      }
+
+      async function saveActiveNoteToFile() {
+        const note = activeNote();
+        const filename = noteFileName(note);
+
+        if (typeof window.showSaveFilePicker === "function") {
+          try {
+            const handle = await window.showSaveFilePicker({
+              suggestedName: filename,
+              types: [{ description: "Markdown file", accept: { "text/markdown": [".md"] } }]
+            });
+            const writable = await handle.createWritable();
+            await writable.write(note.text);
+            await writable.close();
+            statusElement.textContent = "Saved to file";
+            return;
+          } catch (error) {
+            if (error?.name === "AbortError") return;
+          }
+        }
+
+        const url = URL.createObjectURL(new Blob([note.text], { type: "text/markdown;charset=utf-8" }));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+        statusElement.textContent = "Markdown file downloaded";
       }
 
       function saveSoon() {
@@ -486,6 +526,8 @@
         renderEditor(2);
         saveSoon();
       });
+
+      document.querySelector("#LocalMarkdown-save-file").addEventListener("click", saveActiveNoteToFile);
 
       document.querySelector("#LocalMarkdown-delete").addEventListener("click", () => {
         if (!confirm(`Delete “${noteTitle(activeNote())}”?`)) return;
