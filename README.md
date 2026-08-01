@@ -20,7 +20,7 @@ Local Markdown is a lightweight, zero-install Markdown editor for everyday notes
 2. Put `dog.png` beside `local-markdown.html` to display the current image example.
 3. Open `local-markdown.html` in Chrome.
 4. Select **Open file** to add an existing `.md` or `.markdown` file to the left sidebar, or select **+** to add a new file.
-5. For a new file, select **Save** once and choose its folder. The Save button then disappears and later changes save automatically.
+5. For a new file, select **Save** once, edit the `.md` filename if needed, and choose its folder. The Save button then disappears and later changes save automatically.
 
 Select a filename in the left sidebar to switch the active editor. Local Markdown asks Chrome for access only to the file or folder you select. Your Markdown files and pasted images remain local.
 

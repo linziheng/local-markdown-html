@@ -287,20 +287,6 @@
         return `Untitled-${Date.now()}.md`;
       }
 
-      async function unusedMarkdownName(directoryHandle, suggestedName) {
-        const base = suggestedName.replace(/\.md$/i, "");
-        for (let number = 1; number <= 1000; number += 1) {
-          const name = number === 1 ? `${base}.md` : `${base}-${number}.md`;
-          try {
-            await directoryHandle.getFileHandle(name);
-          } catch (error) {
-            if (error?.name === "NotFoundError") return name;
-            throw error;
-          }
-        }
-        throw new Error("Could not create a unique Markdown name");
-      }
-
       function orderedAttachmentName(extension) {
         const time = Math.max(Date.now(), lastAttachmentTime + 1);
         lastAttachmentTime = time;
@@ -472,16 +458,15 @@
           updateStatus("Create or open a Markdown file before pasting images");
           return;
         }
+        if (!file.handle) {
+          await saveActiveFile();
+          if (!file.handle || activeFile() !== file) return;
+        }
         if (!file.directoryHandle) {
           updateStatus(`Choose the folder containing ${file.name}…`);
           const directoryHandle = await pickContainingDirectory(file);
           if (!directoryHandle || activeFile() !== file) return;
           file.directoryHandle = directoryHandle;
-        }
-        if (!file.handle) {
-          updateStatus("Saving Markdown file…");
-          await saveActiveFile();
-          if (!file.handle || activeFile() !== file) return;
         }
 
         const directoryHandle = file.directoryHandle;
@@ -539,6 +524,28 @@
         }
       }
 
+      async function pickMarkdownFile(file) {
+        if (typeof window.showSaveFilePicker !== "function") {
+          updateStatus("Saving local files requires Chrome");
+          return null;
+        }
+        try {
+          return await window.showSaveFilePicker({
+            id: "LocalMarkdownSaveFile",
+            suggestedName: suggestedFileName(file),
+            excludeAcceptAllOption: true,
+            types: [{
+              description: "Markdown file",
+              accept: { "text/markdown": [".md", ".markdown"] }
+            }]
+          });
+        } catch (error) {
+          if (error?.name === "AbortError") updateStatus();
+          else updateStatus("Could not choose file name");
+          return null;
+        }
+      }
+
       async function pickContainingDirectory(file) {
         const directoryHandle = await pickMarkdownDirectory();
         if (!directoryHandle || !file.handle) return directoryHandle;
@@ -552,32 +559,21 @@
       }
 
       async function saveFile(file) {
-        if (file.builtin || (!file.handle && !file.directoryHandle)) return false;
+        if (file.builtin || !file.handle) return false;
         const currentSave = activeSaves.get(file.id);
         if (currentSave) {
           if (!await currentSave) return false;
           return file.dirty ? saveFile(file) : true;
         }
 
-        const directoryHandle = file.directoryHandle;
         const operation = (async () => {
           const text = file.text;
-          let handle = file.handle;
-          let createdName = null;
           try {
-            if (!handle) {
-              createdName = await unusedMarkdownName(directoryHandle, suggestedFileName(file));
-              handle = await directoryHandle.getFileHandle(createdName, { create: true });
-            }
-            await writeText(handle, text);
-            file.handle = handle;
-            file.name = handle.name;
+            await writeText(file.handle, text);
+            file.name = file.handle.name;
             if (file.text === text) file.dirty = false;
             return true;
           } catch {
-            if (createdName) {
-              try { await directoryHandle.removeEntry(createdName); } catch {}
-            }
             return false;
           }
         })();
@@ -614,15 +610,19 @@
         const file = activeFile();
         if (file.builtin || file.handle) return;
 
-        if (!file.directoryHandle) {
-          updateStatus("Choose this file's folder…");
-          const directoryHandle = await pickMarkdownDirectory();
-          if (!directoryHandle || activeFile() !== file) return;
-          file.directoryHandle = directoryHandle;
-        }
+        updateStatus("Choose a file name and folder…");
+        const previousName = file.name;
+        const handle = await pickMarkdownFile(file);
+        if (!handle || activeFile() !== file) return;
+        file.handle = handle;
+        file.name = handle.name;
         cancelAutoSave(file);
         updateStatus("Saving…");
         const saved = await saveFile(file);
+        if (!saved) {
+          file.handle = null;
+          file.name = previousName;
+        }
         renderFiles();
         updateStatus(saved
           ? (file.dirty ? "Not saved" : "Saved")
