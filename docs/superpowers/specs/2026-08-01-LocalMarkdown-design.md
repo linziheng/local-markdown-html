@@ -53,7 +53,7 @@ This layout favors frequent note switching without reducing the editor to a narr
 
 New note creates a blank document, selects it, and moves focus into the editor. LocalMarkdown derives the display title from the first Markdown heading or the first non-empty line. A document with no non-empty content is titled “Untitled note.”
 
-Derived titles update while editing. When exporting an individual note, LocalMarkdown converts the derived title to a safe filename, preserves the `.md` extension, and adds a numeric suffix if necessary.
+Derived titles update while editing. When exporting an individual note, LocalMarkdown converts the derived title to a safe filename and preserves the `.md` extension.
 
 ### Note list behavior
 
@@ -139,7 +139,7 @@ The source repository may use development dependencies. They are build-time only
 The source is divided into units with narrow responsibilities:
 
 - **Workspace model:** document schema, title derivation, ordering, search, duplication, and deletion undo.
-- **Workspace store:** versioned serialization, Chrome storage, staged writes, migration, and storage error reporting.
+- **Workspace store:** versioned serialization, Chrome storage, atomic persistence, migration, and storage error reporting.
 - **Import and export:** Markdown import, Markdown download, workspace validation, merge, and replacement.
 - **Markdown service:** parsing, safe reading-view rendering, and feature policy.
 - **Live Preview editor:** CodeMirror setup, Markdown decorations, formatting commands, and editor/view synchronization.
@@ -157,13 +157,12 @@ Production dependencies are bundled into `localmarkdown.html`. Licenses and requ
 
 ## Workspace data model
 
-The serialized workspace has this conceptual shape:
+The stored workspace has this conceptual shape:
 
 ```text
 LocalMarkdownWorkspace
   product: "LocalMarkdown"
   schemaVersion: 1
-  exportedAt: ISO timestamp when exported
   activeDocumentId: document identifier or null
   preferences:
     theme: "system" | "light" | "dark"
@@ -181,6 +180,8 @@ Timestamps are stored in UTC and formatted in local time for display. Derived ti
 
 Internal deletion-undo state is session-only and is not included in workspace exports.
 
+A complete backup wraps that workspace with `format: "LocalMarkdownWorkspaceBackup"`, `product: "LocalMarkdown"`, `schemaVersion: 1`, and an `exportedAt` ISO timestamp. Keeping export metadata outside the stored workspace prevents ordinary automatic saves from changing backup-only fields.
+
 ## Data flow and persistence
 
 1. On startup, LocalMarkdown loads and validates the stored workspace.
@@ -192,7 +193,9 @@ Internal deletion-undo state is session-only and is not included in workspace ex
 7. The status moves through Saving, Saved, or Save failed.
 8. Search and ordering operate against the in-memory documents and do not require storage reads.
 
-The version 1 Chrome storage adapter uses `localStorage` behind a narrow interface. Its key is namespaced with `LocalMarkdown` and the schema version. A future adapter can migrate the same workspace model to IndexedDB without changing editor or UI modules.
+The version 1 Chrome storage adapter uses `localStorage` behind a narrow interface. Its primary key is `LocalMarkdown.workspace.v1`. `localStorage.setItem` replaces that value atomically: LocalMarkdown serializes and validates the candidate in memory before calling it, and a failed call leaves the previous value in place. A future adapter can migrate the same workspace model to IndexedDB without changing editor or UI modules.
+
+Deletion removes and persists the document immediately, but LocalMarkdown retains a session-only copy until the Undo message expires. Undo reinserts the document with its original identifier and persists the restored workspace.
 
 LocalMarkdown never presents browser storage as a backup. The welcome note and workspace menu explain how to export a complete LocalMarkdown workspace backup.
 
@@ -201,13 +204,13 @@ LocalMarkdown never presents browser storage as a backup. The welcome note and w
 ### Markdown files
 
 - Importing one or more `.md` files creates new LocalMarkdown documents.
-- Imported filenames are not trusted as HTML and are used only as fallback title text when the Markdown is empty.
+- Imported filenames are used only to name import results and errors; titles still derive from Markdown. An empty imported file becomes an “Untitled note.”
 - Downloading a note creates a UTF-8 `.md` file with a safe filename.
 
 ### Complete workspace backup
 
 - Export creates a UTF-8 JSON file named `LocalMarkdown-workspace.json`.
-- The backup includes the product marker, schema version, export timestamp, preferences, active document, and all documents.
+- The backup envelope includes the LocalMarkdown product marker, backup format, schema version, and export timestamp. Its nested workspace contains preferences, the active document, and all documents.
 - Import parses and validates the entire candidate before changing memory or storage.
 - Merge is the default and assigns new identifiers when imported identifiers conflict.
 - Replace requires explicit confirmation and retains the current in-memory workspace until the replacement is validated and stored successfully.
