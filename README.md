@@ -7,14 +7,14 @@
 <p align="center">A lightweight browser-based Markdown editor for local files.</p>
 
 <p align="center">
-  <a href="https://linziheng.github.io/local-markdown-html/"><strong>Open Local Markdown</strong></a>
+  <a href="https://linziheng.github.io/local-markdown/"><strong>Open Local Markdown</strong></a>
 </p>
 
 Open Local Markdown in desktop Chrome or Edge, choose a Markdown file, and start writing. You do not need to download an app or create an account. Local Markdown saves changes directly to files on your computer.
 
 ## Get started
 
-1. Open the [online editor](https://linziheng.github.io/local-markdown-html/) in desktop Chrome or Edge.
+1. Open the [online editor](https://linziheng.github.io/local-markdown/) in desktop Chrome or Edge.
 2. Select **Open** for an existing `.md` file, or select **+** to create one.
 3. Grant access to the file when your browser asks.
 4. Select **Save** once for a new file. After that, changes save automatically.
@@ -40,4 +40,4 @@ An internet connection is required to open the editor and load Vditor from jsDel
 
 ## Run the standalone file
 
-If you prefer, you can still download [`local-markdown.html`](https://github.com/linziheng/local-markdown-html/raw/refs/heads/main/local-markdown.html) and open it directly in desktop Chrome or Edge.
+If you prefer, you can still download [`local-markdown.html`](https://github.com/linziheng/local-markdown/raw/refs/heads/main/local-markdown.html) and open it directly in desktop Chrome or Edge.
