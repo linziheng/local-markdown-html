@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">Local Markdown</title>
+  <desc id="description">Edit local Markdown files without installing an app.</desc>
+  <rect width="1200" height="630" fill="#f5f5f2"/>
+  <rect x="52" y="52" width="1096" height="526" rx="22" fill="#fff" stroke="#deded8" stroke-width="2"/>
+  <rect x="52" y="52" width="250" height="526" rx="22" fill="#fafaf8"/>
+  <path d="M302 52v526" stroke="#deded8" stroke-width="2"/>
+  <g transform="translate(92 98)">
+    <rect x="0" y="0" width="42" height="32" rx="6" fill="#fff" stroke="#111" stroke-width="3"/>
+    <path d="M8 24V8l8 8 7-8v16m10-16v16m-5-5 5 5 5-5" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="56" y="25" fill="#111" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="23" font-weight="650">Local Markdown</text>
+  </g>
+  <rect x="84" y="178" width="186" height="44" rx="7" fill="#ebebe7"/>
+  <text x="104" y="207" fill="#222" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="17">Examples</text>
+  <rect x="84" y="234" width="150" height="15" rx="7" fill="#e7e7e2"/>
+  <rect x="84" y="264" width="178" height="15" rx="7" fill="#ecece8"/>
+  <rect x="84" y="294" width="126" height="15" rx="7" fill="#ecece8"/>
+  <text x="84" y="530" fill="#777" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="14">One HTML file · local-first</text>
+  <g transform="translate(364 134)">
+    <text x="0" y="0" fill="#777" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="17" font-weight="650" letter-spacing="2">ZERO INSTALL · NO ACCOUNT</text>
+    <text x="0" y="82" fill="#111" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="58" font-weight="720">Edit local Markdown.</text>
+    <text x="0" y="150" fill="#111" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="58" font-weight="720">Keep files on your computer.</text>
+    <text x="0" y="207" fill="#555" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="23">Open, edit, and save .md files directly in your browser.</text>
+    <rect x="0" y="254" width="184" height="54" rx="8" fill="#111"/>
+    <text x="28" y="289" fill="#fff" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="19" font-weight="650">Open a local file</text>
+    <rect x="198" y="254" width="158" height="54" rx="8" fill="#fff" stroke="#bbb" stroke-width="2"/>
+    <text x="224" y="289" fill="#111" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="19" font-weight="650">Download HTML</text>
+  </g>
+</svg>

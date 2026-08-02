@@ -1,6 +1,12 @@
 # Local Markdown
 
-Local Markdown is a small, zero-install editor for local Markdown files. Open one HTML file in Chrome, choose the notes you want to edit, and keep everything on your computer.
+**Edit local Markdown files without installing an app.** Open, edit, and save `.md` files directly on your computer—no account, server, or folder access required.
+
+[Try Local Markdown online](https://linziheng.github.io/local-markdown-html/) · [Download the HTML file](https://github.com/linziheng/local-markdown-html/raw/refs/heads/main/local-markdown.html) · [View the source](https://github.com/linziheng/local-markdown-html)
+
+![Local Markdown social preview](social-preview.png)
+
+> Local Markdown currently works best in desktop Chrome or Edge. Your document content is not uploaded, but an internet connection is required to load the editor library.
 
 ## Why use it?
 
@@ -14,11 +20,10 @@ Local Markdown is a small, zero-install editor for local Markdown files. Open on
 
 ## Quick start
 
-1. Download this repository, or download `local-markdown.html` by itself.
-2. Open `local-markdown.html` in desktop Chrome.
-3. Select **Open file** to edit an existing Markdown file, or select **+** to create a new one.
-4. If you created a new file, select **Save** once and choose its name and location.
-5. Start writing. Existing and previously saved files save automatically after you stop typing.
+1. Open the [live editor](https://linziheng.github.io/local-markdown-html/) in desktop Chrome or Edge, or download `local-markdown.html` and open it locally.
+2. Select **Open file** to edit an existing Markdown file, or select **+** to create a new one.
+3. If you created a new file, select **Save** once and choose its name and location.
+4. Start writing. Existing and previously saved files save automatically after you stop typing.
 
 The built-in **Examples** page is pinned at the top of the sidebar and shows common Markdown formatting and keyboard shortcuts. It is read-only for pasted images, so create or open a file before pasting a screenshot.
 
@@ -102,4 +107,6 @@ Local Markdown is designed for desktop Chrome because it uses Chrome's File Syst
 ## Repository files
 
 - `local-markdown.html` — the complete application.
+- `index.html` — the GitHub Pages entry point; it opens the application immediately.
+- `social-preview.svg` and `social-preview.png` — the source and rendered social sharing artwork.
 - `README.md` — usage documentation.
