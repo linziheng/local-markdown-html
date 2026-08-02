@@ -20,24 +20,35 @@
     button:focus-visible { outline: 2px solid #111; outline-offset: 2px; }
 
     .LocalMarkdown-app { height: 100%; display: grid; grid-template-columns: 220px minmax(0, 1fr); }
-    .LocalMarkdown-sidebar { min-width: 0; overflow: auto; border-right: 1px solid #e5e5e5; }
+    .LocalMarkdown-sidebar {
+      min-width: 0; min-height: 0; overflow: hidden; border-right: 1px solid #e5e5e5;
+      display: grid; grid-template-rows: 40px minmax(0, 1fr);
+    }
     .LocalMarkdown-sidebar-header,
     .LocalMarkdown-toolbar { height: 40px; padding: 0 10px; border-bottom: 1px solid #e5e5e5; }
     .LocalMarkdown-sidebar-header { display: flex; align-items: center; gap: 8px; }
-    .LocalMarkdown-sidebar-header strong { flex: 1; }
+    .LocalMarkdown-sidebar-header strong {
+      min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
     .LocalMarkdown-logo { width: 24px; height: 24px; flex: 0 0 24px; }
     .LocalMarkdown-new {
       width: 30px; height: 30px; padding: 0; border: 0; border-radius: 3px;
       background: transparent; font-size: 20px; line-height: 1;
     }
-    .LocalMarkdown-files { padding: 8px; }
+    .LocalMarkdown-files {
+      min-height: 0; overflow: auto; padding: 8px;
+      scrollbar-width: none; -ms-overflow-style: none;
+    }
+    .LocalMarkdown-files::-webkit-scrollbar { display: none; width: 0; height: 0; }
     .LocalMarkdown-file {
       width: 100%; margin: 0 0 3px; padding: 8px 9px; overflow: hidden;
       border: 0; text-align: left; text-overflow: ellipsis; white-space: nowrap;
+      transition: opacity 80ms ease;
     }
+    .LocalMarkdown-file[draggable="true"] { cursor: grab; }
+    .LocalMarkdown-file[draggable="true"]:active { cursor: grabbing; }
     .LocalMarkdown-file[aria-current="true"] { background: #f1f1f1; font-weight: 600; }
-    .LocalMarkdown-examples { margin-bottom: 9px; }
-
+    .LocalMarkdown-file.LocalMarkdown-dragging { opacity: 0; }
     .LocalMarkdown-main { min-width: 0; min-height: 0; display: grid; grid-template-rows: 40px minmax(0, 1fr); }
     .LocalMarkdown-toolbar {
       display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -59,7 +70,10 @@
     .LocalMarkdown-action {
       padding: 4px 7px; border: 0; border-radius: 3px; background: transparent; font-size: 13px;
     }
-    .LocalMarkdown-editor { min-width: 0; min-height: 0; overflow: hidden; }
+    .LocalMarkdown-editor {
+      position: relative; z-index: 1;
+      min-width: 0; min-height: 0; overflow: visible;
+    }
 
     .LocalMarkdown-editor .vditor {
       --toolbar-height: 30px;
@@ -155,6 +169,7 @@
       let sessionWritePromise = Promise.resolve();
       let sessionNeedsSave = false;
       let sessionRestored = false;
+      let draggedFileId = null;
       const autoSaveTimers = new Map();
       const activeSaves = new Map();
       const attachmentPreviewUrls = new Map();
@@ -278,7 +293,7 @@
         id: "LocalMarkdown-welcome", name: "", text: "", handle: null,
         attachments: new Map(), builtin: true, welcome: true, dirty: false
       };
-      const session = { activeId: example.id, files: [example] };
+      const session = { activeId: example.id, files: [example], lastOpenHandle: null };
 
       function activeFile() {
         return session.files.find(file => file.id === session.activeId);
@@ -347,6 +362,10 @@
         return {
           version: 1,
           activeId: session.activeId,
+          lastOpenHandle: session.lastOpenHandle,
+          fileOrder: session.files
+            .filter(file => !file.welcome)
+            .map(file => file.id),
           files: session.files
             .filter(file => !file.builtin && !file.welcome)
             .map(file => ({
@@ -461,10 +480,22 @@
             }));
 
           const refreshedFiles = await Promise.all(restoredFiles.map(refreshRestoredFile));
-          session.files = [example, ...restoredFiles];
+          const availableFiles = [example, ...restoredFiles];
+          const filesById = new Map(availableFiles.map(file => [file.id, file]));
+          const orderedFiles = [];
+          for (const id of Array.isArray(storedSession.fileOrder) ? storedSession.fileOrder : []) {
+            const file = filesById.get(id);
+            if (!file) continue;
+            orderedFiles.push(file);
+            filesById.delete(id);
+          }
+          session.files = [...orderedFiles, ...filesById.values()];
           session.activeId = session.files.some(file => file.id === storedSession.activeId)
             ? storedSession.activeId
             : (restoredFiles[0]?.id || example.id);
+          session.lastOpenHandle = storedSession.lastOpenHandle?.kind === "file"
+            ? storedSession.lastOpenHandle
+            : (activeFile()?.handle || restoredFiles.find(file => file.handle)?.handle || null);
           if (refreshedFiles.some(Boolean)) sessionNeedsSave = true;
         }
 
@@ -505,25 +536,91 @@
 
       function renderFiles() {
         filesElement.replaceChildren();
-        const examplesButton = document.createElement("button");
-        examplesButton.id = "LocalMarkdown-examples";
-        examplesButton.type = "button";
-        examplesButton.className = "LocalMarkdown-file LocalMarkdown-examples";
-        examplesButton.textContent = "Examples";
-        examplesButton.setAttribute("aria-current", String(example.id === session.activeId));
-        examplesButton.addEventListener("click", showExamples);
-        filesElement.append(examplesButton);
-
         for (const file of session.files) {
-          if (file.builtin) continue;
+          if (file.welcome) continue;
           const button = document.createElement("button");
           button.type = "button";
           button.className = "LocalMarkdown-file";
-          button.textContent = `${file.name}${file.dirty ? " •" : ""}`;
+          if (file === example) button.id = "LocalMarkdown-examples";
+          button.draggable = true;
+          button.dataset.fileId = file.id;
+          button.textContent = file === example
+            ? "Examples"
+            : `${file.name}${file.dirty ? " •" : ""}`;
+          button.title = "Drag to reorder";
           button.setAttribute("aria-current", String(file.id === session.activeId));
-          button.addEventListener("click", () => selectFile(file.id));
+          button.addEventListener("click", file === example
+            ? showExamples
+            : () => selectFile(file.id));
+          enableFileReordering(button, file.id);
           filesElement.append(button);
         }
+      }
+
+      function dropAfter(button, event) {
+        const bounds = button.getBoundingClientRect();
+        return event.clientY >= bounds.top + bounds.height / 2;
+      }
+
+      function previewFileOrder(target, placeAfter) {
+        const buttons = Array.from(filesElement.querySelectorAll("[data-file-id]"));
+        const draggedButton = buttons.find(button => button.dataset.fileId === draggedFileId);
+        if (!draggedButton || draggedButton === target) return;
+
+        for (const button of buttons) {
+          for (const animation of button.getAnimations?.() || []) animation.cancel();
+        }
+        const previousTops = new Map(buttons.map(button => [button, button.getBoundingClientRect().top]));
+        const reference = placeAfter ? target.nextElementSibling : target;
+        filesElement.insertBefore(draggedButton, reference);
+
+        for (const button of buttons) {
+          if (button === draggedButton) continue;
+          const offset = previousTops.get(button) - button.getBoundingClientRect().top;
+          if (Math.abs(offset) < 1 || typeof button.animate !== "function") continue;
+          button.animate(
+            [{ transform: `translateY(${offset}px)` }, { transform: "translateY(0)" }],
+            { duration: 150, easing: "cubic-bezier(.2, .8, .2, 1)" }
+          );
+        }
+      }
+
+      function enableFileReordering(button, fileId) {
+        button.addEventListener("dragstart", event => {
+          draggedFileId = fileId;
+          button.classList.add("LocalMarkdown-dragging");
+          if (event.dataTransfer) {
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", fileId);
+          }
+        });
+        button.addEventListener("dragover", event => {
+          if (!draggedFileId || draggedFileId === fileId) return;
+          event.preventDefault();
+          if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+          previewFileOrder(button, dropAfter(button, event));
+        });
+        button.addEventListener("dragend", () => {
+          const cancelled = draggedFileId === fileId;
+          draggedFileId = null;
+          if (cancelled) renderFiles();
+        });
+      }
+
+      function commitPreviewedFileOrder() {
+        const filesById = new Map(session.files
+          .filter(file => !file.welcome)
+          .map(file => [file.id, file]));
+        const orderedFiles = Array.from(filesElement.querySelectorAll("[data-file-id]"))
+          .map(button => filesById.get(button.dataset.fileId))
+          .filter(Boolean);
+        let orderedIndex = 0;
+        session.files = session.files.map(file => file.welcome
+          ? file
+          : (orderedFiles[orderedIndex++] || file));
+        draggedFileId = null;
+        renderFiles();
+        scheduleSessionSave();
       }
 
       function activateFile(file, message = null) {
@@ -532,6 +629,7 @@
         if (!(file.attachments instanceof Map)) file.attachments = new Map();
         if (!session.files.includes(file)) session.files.push(file);
         session.activeId = file.id;
+        if (file.handle) session.lastOpenHandle = file.handle;
         if (editorReady) editor.setValue(file.text, true);
         renderFiles();
         updateStatus(message);
@@ -1163,6 +1261,8 @@
         if (!saved) {
           file.handle = null;
           file.name = previousName;
+        } else {
+          session.lastOpenHandle = handle;
         }
         renderFiles();
         updateStatus(saved
@@ -1180,13 +1280,16 @@
 
         let handle;
         try {
-          [handle] = await window.showOpenFilePicker({
+          const pickerOptions = {
+            id: "LocalMarkdownOpenFile",
             multiple: false,
             types: [{
               description: "Markdown file",
               accept: { "text/markdown": [".md", ".markdown"] }
             }]
-          });
+          };
+          if (session.lastOpenHandle) pickerOptions.startIn = session.lastOpenHandle;
+          [handle] = await window.showOpenFilePicker(pickerOptions);
         } catch (error) {
           if (error?.name === "AbortError") updateStatus();
           else updateStatus("Could not choose file");
@@ -1233,6 +1336,16 @@
 
       document.querySelector("#LocalMarkdown-new").addEventListener("click", createNewFile);
 
+      filesElement.addEventListener("dragover", event => {
+        if (!draggedFileId) return;
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      });
+      filesElement.addEventListener("drop", event => {
+        if (!draggedFileId) return;
+        event.preventDefault();
+        commitPreviewedFileOrder();
+      });
       document.querySelector("#LocalMarkdown-open-file").addEventListener("click", openLocalFile);
       document.querySelector("#LocalMarkdown-save-file").addEventListener("click", saveActiveFile);
       for (const button of viewButtons) {
@@ -1292,9 +1405,43 @@
       renderFiles();
       updateStatus();
 
-      function toolbarControl(name, tipPosition = "s") {
+      function toolbarControl(name, tipPosition = "n") {
         return { name, tipPosition };
       }
+
+      const emojiMap = {
+        smile: "😄", grin: "😁", joy: "😂", rofl: "🤣", relaxed: "☺️",
+        blush: "😊", slightly_smiling_face: "🙂", upside_down_face: "🙃",
+        wink: "😉", heart_eyes: "😍", star_struck: "🤩", kissing_heart: "😘",
+        yum: "😋", stuck_out_tongue: "😛", zany_face: "🤪", thinking: "🤔",
+        raised_eyebrow: "🤨", neutral_face: "😐", expressionless: "😑",
+        unamused: "😒", roll_eyes: "🙄", grimacing: "😬", relieved: "😌",
+        pensive: "😔", sleepy: "😪", sleeping: "😴", drooling_face: "🤤",
+        mask: "😷", thermometer_face: "🤒", hot_face: "🥵", cold_face: "🥶",
+        sunglasses: "😎", nerd_face: "🤓", monocle_face: "🧐", confused: "😕",
+        worried: "😟", frowning: "☹️", open_mouth: "😮", flushed: "😳",
+        pleading_face: "🥺", cry: "😢", sob: "😭", scream: "😱",
+        angry: "😠", rage: "😡", exploding_head: "🤯", party_face: "🥳",
+        heart: "❤️", orange_heart: "🧡", yellow_heart: "💛", green_heart: "💚",
+        blue_heart: "💙", purple_heart: "💜", broken_heart: "💔", sparkles: "✨",
+        fire: "🔥", hundred: "💯", tada: "🎉", confetti_ball: "🎊",
+        "+1": "👍", "-1": "👎", ok_hand: "👌", victory_hand: "✌️",
+        crossed_fingers: "🤞", love_you_gesture: "🤟", call_me_hand: "🤙",
+        clap: "👏", raised_hands: "🙌", open_hands: "👐", palms_up: "🤲",
+        handshake: "🤝", pray: "🙏", muscle: "💪", wave: "👋",
+        point_up: "☝️", point_right: "👉", point_left: "👈", point_down: "👇",
+        eyes: "👀", brain: "🧠", speech_balloon: "💬", thought_balloon: "💭",
+        check_mark: "✅", warning: "⚠️", x: "❌", question: "❓",
+        exclamation: "❗", bulb: "💡", pin: "📌", link: "🔗",
+        memo: "📝", books: "📚", calendar: "📅", chart_up: "📈",
+        chart_down: "📉", target: "🎯", trophy: "🏆", medal: "🏅",
+        gift: "🎁", bell: "🔔", lock: "🔒", unlock: "🔓",
+        key: "🔑", gear: "⚙️", hammer_and_wrench: "🛠️", magnifying_glass: "🔍",
+        laptop: "💻", phone: "📱", camera: "📷", hourglass: "⏳",
+        coffee: "☕", pizza: "🍕", cake: "🎂", seedling: "🌱",
+        sun: "☀️", moon: "🌙", star: "⭐", rainbow: "🌈", earth: "🌍",
+        rocket: "🚀", airplane: "✈️", car: "🚗", house: "🏠"
+      };
 
       editor = new Vditor("LocalMarkdown-editor", {
         cdn: vditorCdn,
@@ -1302,19 +1449,20 @@
         value: activeFile().text,
         height: "100%",
         minHeight: 200,
+        hint: { emoji: emojiMap },
         toolbar: [
-          toolbarControl("emoji", "se"), toolbarControl("headings", "se"),
-          toolbarControl("bold", "se"), toolbarControl("italic", "se"),
-          toolbarControl("strike", "se"), toolbarControl("link"), "|",
+          toolbarControl("emoji", "ne"), toolbarControl("headings", "ne"),
+          toolbarControl("bold", "ne"), toolbarControl("italic", "ne"),
+          toolbarControl("strike", "ne"), toolbarControl("link"), "|",
           toolbarControl("list"), toolbarControl("ordered-list"), toolbarControl("check"),
           toolbarControl("outdent"), toolbarControl("indent"), "|",
           toolbarControl("quote"), toolbarControl("line"), toolbarControl("code"),
           toolbarControl("inline-code"), toolbarControl("insert-before"),
           toolbarControl("insert-after"), "|", toolbarControl("upload"),
           toolbarControl("table"), "|",
-          toolbarControl("undo", "sw"), toolbarControl("redo", "sw"), "|",
-          toolbarControl("fullscreen", "sw"),
-          toolbarControl("outline", "sw"), toolbarControl("export", "sw"),
+          toolbarControl("undo", "nw"), toolbarControl("redo", "nw"), "|",
+          toolbarControl("fullscreen", "nw"),
+          toolbarControl("outline", "nw"), toolbarControl("export", "nw"),
           { name: "edit-mode", className: "LocalMarkdown-internal-edit-mode" }
         ],
         customWysiwygToolbar() {},
