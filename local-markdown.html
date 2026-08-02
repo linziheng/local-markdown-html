@@ -88,12 +88,22 @@
       const editorElement = document.querySelector("#LocalMarkdown-editor");
       let editor = null;
       let editorReady = false;
-      let lastAttachmentTime = 0;
-      let imagePreviewTimer = null;
-      const localImageUrls = new Map();
+      let attachmentPreviewTimer = null;
+      let attachmentPreviewObserver = null;
+      let imageWorker = null;
+      let imageWorkerUrl = null;
+      let imageWorkerRequestId = 0;
       const autoSaveTimers = new Map();
       const activeSaves = new Map();
+      const attachmentPreviewUrls = new Map();
+      const attachmentImageIds = new WeakMap();
+      const imageWorkerRequests = new Map();
       const autoSaveDelay = 700;
+      const attachmentBlockStart = "<!-- LocalMarkdown attachments:v1";
+      const attachmentBlockEnd = "-->";
+      const attachmentPathPrefix = "local-markdown-attachment/";
+      const pastedImageMaxDimension = 2000;
+      const pastedImageWebpQuality = 0.9;
 
       const exampleText = [
         "# Markdown examples",
@@ -177,11 +187,18 @@
         "| Align current column right | `⌘ + Shift + R` | `Ctrl + Shift + R` |",
         "",
         "## Image",
-        "Paste a clipboard image with `⌘ + V` (Mac) or `Ctrl + V` (Windows). The first time Local Markdown needs image access, it asks you to choose the folder containing the Markdown file, then saves the image there as a PNG or JPEG with an ordered timestamp and a random suffix.",
+        "### Screenshot or clipboard image",
+        "Create or open a Markdown file, take a screenshot or copy an image, then paste it with `⌘ + V` (Mac) or `Ctrl + V` (Windows). Local Markdown shows it immediately and stores it inside the same Markdown file.",
         "",
-        "Standard Markdown has no image-size syntax. Use an HTML image tag and change `width` to the size you want in pixels. If you leave out `height`, the image keeps its original proportions.",
+        "### External image",
+        "Use standard Markdown with a direct image URL:",
         "",
-        "<img src=\"dog.png\" alt=\"Dog\" width=\"320\">",
+        "![Random external image](https://picsum.photos/200/300)",
+        "",
+        "### Clickable external image",
+        "Wrap the image in a Markdown link. Selecting the image opens the linked page:",
+        "",
+        "[![Clickable random image](https://picsum.photos/200/300)](https://picsum.photos/)",
         "",
         "---"
       ].join("\n");
@@ -189,11 +206,11 @@
       const createId = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
       const example = {
         id: "LocalMarkdown-examples", name: "Markdown examples", text: exampleText,
-        handle: null, directoryHandle: null, builtin: true, dirty: false
+        handle: null, attachments: new Map(), builtin: true, dirty: false
       };
       const welcome = {
-        id: "LocalMarkdown-welcome", name: "", text: "", handle: null, directoryHandle: null,
-        builtin: true, welcome: true, dirty: false
+        id: "LocalMarkdown-welcome", name: "", text: "", handle: null,
+        attachments: new Map(), builtin: true, welcome: true, dirty: false
       };
       const session = { activeId: example.id, files: [example] };
 
@@ -204,7 +221,7 @@
       function captureEditorValue() {
         if (!editorReady) return;
         const file = activeFile();
-        const value = editor.getValue();
+        const value = canonicalEditorText(editor.getValue(), file);
         if (value === file.text) return;
         file.text = value;
         if (!file.builtin) {
@@ -239,13 +256,14 @@
 
       function activateFile(file, message = null) {
         const previous = activeFile();
-        if (previous) releaseLocalImageUrls(previous.id);
+        if (previous) releaseAttachmentPreviews(previous.id);
+        if (!(file.attachments instanceof Map)) file.attachments = new Map();
         if (!session.files.includes(file)) session.files.push(file);
         session.activeId = file.id;
         if (editorReady) editor.setValue(file.text, true);
         renderFiles();
         updateStatus(message);
-        scheduleLocalImagePreviews();
+        scheduleAttachmentPreviews();
       }
 
       function selectFile(id) {
@@ -259,6 +277,7 @@
         if (activeFile() === example) return;
         captureEditorValue();
         example.text = exampleText;
+        example.attachments.clear();
         activateFile(example);
       }
 
@@ -287,78 +306,395 @@
         return `Untitled-${Date.now()}.md`;
       }
 
-      function orderedAttachmentName(extension) {
-        const time = Math.max(Date.now(), lastAttachmentTime + 1);
-        lastAttachmentTime = time;
-        const date = new Date(time);
-        const pad = (value, length = 2) => String(value).padStart(length, "0");
-        const timestamp = [
-          date.getFullYear(), pad(date.getMonth() + 1), pad(date.getDate())
-        ].join("") + `-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}-${pad(date.getMilliseconds(), 3)}`;
-        const randomBytes = new Uint8Array(3);
-        crypto.getRandomValues(randomBytes);
-        const random = Array.from(randomBytes, value => value.toString(16).padStart(2, "0")).join("");
-        return `${timestamp}-${random}.${extension}`;
+      function createAttachmentId() {
+        return crypto.randomUUID?.()
+          || `image-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       }
 
-      async function normalizePastedImage(file) {
-        const type = file.type.toLowerCase();
-        if (type === "image/png") return { blob: file, extension: "png" };
-        if (type === "image/jpeg" || type === "image/jpg") {
-          return { blob: file, extension: "jpg" };
-        }
+      function attachmentPath(id) {
+        return `${attachmentPathPrefix}${id}`;
+      }
 
-        const bitmap = await createImageBitmap(file);
+      function parseStoredMarkdown(storedText) {
+        const match = storedText.match(
+          /(?:\n{2,}|^)<!-- LocalMarkdown attachments:v1\n([\s\S]*?)\n-->\s*$/
+        );
+        if (!match) return { text: storedText, attachments: new Map(), warning: null };
+
         try {
-          const canvas = document.createElement("canvas");
-          canvas.width = bitmap.width;
-          canvas.height = bitmap.height;
-          canvas.getContext("2d").drawImage(bitmap, 0, 0);
-          const blob = await new Promise((resolve, reject) => {
-            canvas.toBlob(result => result ? resolve(result) : reject(new Error("PNG conversion failed")), "image/png");
-          });
-          return { blob, extension: "png" };
-        } finally {
-          bitmap.close();
+          const manifest = JSON.parse(match[1]);
+          if (manifest?.version !== 1 || !Array.isArray(manifest.attachments)) {
+            throw new Error("Unsupported attachment manifest");
+          }
+
+          const attachments = new Map();
+          for (const item of manifest.attachments) {
+            if (!item || typeof item.id !== "string"
+                || typeof item.type !== "string" || !item.type.startsWith("image/")
+                || typeof item.data !== "string") continue;
+            attachments.set(item.id, {
+              id: item.id,
+              type: item.type,
+              data: item.data,
+              blob: null,
+              pending: null,
+              error: false
+            });
+          }
+
+          return {
+            text: storedText.slice(0, match.index).replace(/\n+$/, ""),
+            attachments,
+            warning: null
+          };
+        } catch {
+          return {
+            text: storedText,
+            attachments: new Map(),
+            warning: "Attachment data could not be read"
+          };
         }
       }
 
-      async function unusedAttachmentName(directoryHandle, extension) {
-        for (let attempt = 0; attempt < 20; attempt += 1) {
-          const name = orderedAttachmentName(extension);
-          try {
-            await directoryHandle.getFileHandle(name);
-          } catch (error) {
-            if (error?.name === "NotFoundError") return name;
-            throw error;
+      function referencedAttachmentIds(text) {
+        const ids = new Set();
+        const pattern = /local-markdown-attachment\/([a-z\d-]+)/gi;
+        for (const match of text.matchAll(pattern)) ids.add(match[1]);
+        return ids;
+      }
+
+      function revokeAttachmentPreview(fileId, attachmentId) {
+        const key = `${fileId}\n${attachmentId}`;
+        const url = attachmentPreviewUrls.get(key);
+        if (!url) return;
+        URL.revokeObjectURL(url);
+        attachmentPreviewUrls.delete(key);
+      }
+
+      function releaseAttachmentPreviews(fileId = null) {
+        for (const [key, url] of attachmentPreviewUrls) {
+          if (!fileId || key.startsWith(`${fileId}\n`)) {
+            URL.revokeObjectURL(url);
+            attachmentPreviewUrls.delete(key);
           }
         }
-        throw new Error("Could not create a unique image name");
       }
 
-      async function savePastedImage(directoryHandle, file) {
-        const { blob, extension } = await normalizePastedImage(file);
-        const name = await unusedAttachmentName(directoryHandle, extension);
-        const handle = await directoryHandle.getFileHandle(name, { create: true });
-        try {
-          const writable = await handle.createWritable();
-          await writable.write(blob);
-          await writable.close();
-          return name;
-        } catch (error) {
-          try { await directoryHandle.removeEntry(name); } catch {}
-          throw error;
+      function canonicalEditorText(value, file) {
+        let canonical = value;
+        for (const [key, url] of attachmentPreviewUrls) {
+          if (!key.startsWith(`${file.id}\n`)) continue;
+          const id = key.slice(file.id.length + 1);
+          canonical = canonical.split(url).join(attachmentPath(id));
+        }
+        return canonical;
+      }
+
+      function pruneUnusedAttachments(file) {
+        const referenced = referencedAttachmentIds(file.text);
+        for (const id of file.attachments.keys()) {
+          if (referenced.has(id)) continue;
+          revokeAttachmentPreview(file.id, id);
+          file.attachments.delete(id);
+        }
+        return referenced;
+      }
+
+      function serializeFile(file) {
+        const referenced = pruneUnusedAttachments(file);
+        const attachments = [];
+        for (const [id, attachment] of file.attachments) {
+          if (!referenced.has(id) || !attachment.data) continue;
+          attachments.push({ id, type: attachment.type, data: attachment.data });
+        }
+        if (!attachments.length) return file.text;
+
+        const body = file.text.replace(/\n+$/, "");
+        const manifest = JSON.stringify({ version: 1, attachments });
+        return `${body}\n\n${attachmentBlockStart}\n${manifest}\n${attachmentBlockEnd}\n`;
+      }
+
+      function attachmentIdFromSource(source) {
+        if (!source) return null;
+        const escapedPrefix = attachmentPathPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const match = source.match(new RegExp(`(?:^|/)${escapedPrefix}([a-z\\d-]+)(?:[?#].*)?$`, "i"));
+        return match?.[1] || null;
+      }
+
+      function attachmentBlob(attachment) {
+        if (attachment.blob) return attachment.blob;
+        const binary = atob(attachment.data);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+        attachment.blob = new Blob([bytes], { type: attachment.type });
+        return attachment.blob;
+      }
+
+      function refreshAttachmentPreviews() {
+        if (!editorReady) return;
+        const file = activeFile();
+        if (!file || file.builtin || !file.attachments.size) return;
+        const images = editorElement.querySelectorAll(".vditor-ir img[src], .vditor-wysiwyg img[src]");
+        for (const image of images) {
+          const id = attachmentImageIds.get(image)
+            || attachmentIdFromSource(image.getAttribute("src"));
+          const attachment = id ? file.attachments.get(id) : null;
+          if (!attachment || activeFile() !== file) continue;
+
+          const key = `${file.id}\n${id}`;
+          let url = attachmentPreviewUrls.get(key);
+          if (!url) {
+            try {
+              url = URL.createObjectURL(attachmentBlob(attachment));
+              attachmentPreviewUrls.set(key, url);
+            } catch {
+              continue;
+            }
+          }
+          attachmentImageIds.set(image, id);
+          if (image.getAttribute("src") !== url) image.src = url;
         }
       }
 
-      function clipboardImageFiles(event) {
-        const itemFiles = Array.from(event.clipboardData?.items || [])
-          .filter(item => item.kind === "file" && item.type.startsWith("image/"))
-          .map(item => item.getAsFile())
+      function scheduleAttachmentPreviews() {
+        clearTimeout(attachmentPreviewTimer);
+        attachmentPreviewTimer = setTimeout(() => {
+          attachmentPreviewTimer = null;
+          refreshAttachmentPreviews();
+        }, 0);
+      }
+
+      function observeAttachmentPreviews() {
+        if (attachmentPreviewObserver || typeof MutationObserver !== "function") return;
+        attachmentPreviewObserver = new MutationObserver(() => {
+          refreshAttachmentPreviews();
+        });
+        attachmentPreviewObserver.observe(editorElement, {
+          subtree: true,
+          childList: true,
+          attributes: true,
+          attributeFilter: ["src"]
+        });
+      }
+
+      function readBlobPayload(blob) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.addEventListener("load", () => {
+            const result = String(reader.result || "");
+            const comma = result.indexOf(",");
+            if (comma < 0) reject(new Error("Could not encode image"));
+            else resolve({ type: blob.type || "image/png", data: result.slice(comma + 1), blob });
+          });
+          reader.addEventListener("error", () => reject(reader.error || new Error("Could not read image")));
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      function canvasToBlob(canvas, type, quality) {
+        return new Promise((resolve, reject) => {
+          canvas.toBlob(
+            blob => blob ? resolve(blob) : reject(new Error("Could not encode image")),
+            type,
+            quality
+          );
+        });
+      }
+
+      async function optimizeImageOnMainThread(file) {
+        if (["image/gif", "image/svg+xml"].includes(file.type)) return readBlobPayload(file);
+        try {
+          const bitmap = await createImageBitmap(file);
+          const scale = Math.min(1, pastedImageMaxDimension / Math.max(bitmap.width, bitmap.height));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+          canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+          canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          bitmap.close();
+          const candidate = await canvasToBlob(canvas, "image/webp", pastedImageWebpQuality);
+          const optimized = scale < 1 || candidate.size < file.size * 0.9 ? candidate : file;
+          return readBlobPayload(optimized);
+        } catch {
+          return readBlobPayload(file);
+        }
+      }
+
+      function getImageWorker() {
+        if (imageWorker) return imageWorker;
+        if (typeof Worker !== "function" || typeof OffscreenCanvas !== "function") return null;
+
+        const source = `
+          const readBlobPayload = blob => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const result = String(reader.result || "");
+              const comma = result.indexOf(",");
+              if (comma < 0) reject(new Error("Could not encode image"));
+              else resolve({ type: blob.type || "image/png", data: result.slice(comma + 1), blob });
+            };
+            reader.onerror = () => reject(reader.error || new Error("Could not read image"));
+            reader.readAsDataURL(blob);
+          });
+
+          const optimize = async (file, maxDimension, quality) => {
+            if (["image/gif", "image/svg+xml"].includes(file.type)) return readBlobPayload(file);
+            try {
+              const bitmap = await createImageBitmap(file);
+              const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+              const canvas = new OffscreenCanvas(
+                Math.max(1, Math.round(bitmap.width * scale)),
+                Math.max(1, Math.round(bitmap.height * scale))
+              );
+              canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+              bitmap.close();
+              const candidate = await canvas.convertToBlob({ type: "image/webp", quality });
+              const optimized = scale < 1 || candidate.size < file.size * 0.9 ? candidate : file;
+              return readBlobPayload(optimized);
+            } catch {
+              return readBlobPayload(file);
+            }
+          };
+
+          self.onmessage = async event => {
+            const { requestId, file, maxDimension, quality } = event.data;
+            try {
+              const result = await optimize(file, maxDimension, quality);
+              self.postMessage({ requestId, result });
+            } catch (error) {
+              self.postMessage({ requestId, error: error?.message || "Could not process image" });
+            }
+          };
+        `;
+
+        imageWorkerUrl = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
+        imageWorker = new Worker(imageWorkerUrl);
+        imageWorker.addEventListener("message", event => {
+          const request = imageWorkerRequests.get(event.data.requestId);
+          if (!request) return;
+          imageWorkerRequests.delete(event.data.requestId);
+          clearTimeout(request.timer);
+          if (event.data.error) request.reject(new Error(event.data.error));
+          else request.resolve(event.data.result);
+        });
+        imageWorker.addEventListener("error", () => {
+          for (const request of imageWorkerRequests.values()) {
+            clearTimeout(request.timer);
+            request.reject(new Error("Image worker failed"));
+          }
+          imageWorkerRequests.clear();
+          imageWorker?.terminate();
+          imageWorker = null;
+          if (imageWorkerUrl) URL.revokeObjectURL(imageWorkerUrl);
+          imageWorkerUrl = null;
+        });
+        return imageWorker;
+      }
+
+      function optimizeImageInWorker(file) {
+        const worker = getImageWorker();
+        if (!worker) return optimizeImageOnMainThread(file);
+        const requestId = ++imageWorkerRequestId;
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            imageWorkerRequests.delete(requestId);
+            reject(new Error("Image processing timed out"));
+          }, 30000);
+          imageWorkerRequests.set(requestId, { resolve, reject, timer });
+          worker.postMessage({
+            requestId,
+            file,
+            maxDimension: pastedImageMaxDimension,
+            quality: pastedImageWebpQuality
+          });
+        }).catch(() => optimizeImageOnMainThread(file));
+      }
+
+      async function processPastedAttachment(file, attachment, image) {
+        const operation = (async () => {
+          const result = await optimizeImageInWorker(image);
+          attachment.type = result.type;
+          attachment.data = result.data;
+          attachment.blob = result.blob;
+          attachment.error = false;
+          revokeAttachmentPreview(file.id, attachment.id);
+          if (activeFile() === file) scheduleAttachmentPreviews();
+          file.dirty = true;
+          scheduleAutoSave(file);
+          return true;
+        })().catch(() => {
+          attachment.error = true;
+          if (activeFile() === file) updateStatus("Could not embed pasted image");
+          return false;
+        });
+
+        attachment.pending = operation;
+        try {
+          return await operation;
+        } finally {
+          if (attachment.pending === operation) attachment.pending = null;
+        }
+      }
+
+      async function waitForFileAttachments(file) {
+        const pending = Array.from(file.attachments.values())
+          .map(attachment => attachment.pending)
           .filter(Boolean);
-        if (itemFiles.length) return itemFiles;
-        return Array.from(event.clipboardData?.files || [])
-          .filter(file => file.type.startsWith("image/"));
+        if (pending.length) await Promise.allSettled(pending);
+        const referenced = referencedAttachmentIds(file.text);
+        return Array.from(referenced).every(id => {
+          const attachment = file.attachments.get(id);
+          return attachment?.data && !attachment.error;
+        });
+      }
+
+      async function pasteEmbeddedImages(files) {
+        const images = Array.from(files || []).filter(file => file?.type?.startsWith("image/"));
+        if (!images.length || !editorReady) return null;
+
+        const file = activeFile();
+        if (!file || file.builtin || file.welcome) {
+          updateStatus("Create or open a Markdown file before pasting images");
+          return "Create or open a Markdown file before pasting images";
+        }
+
+        const attachments = images.map(image => {
+          const id = createAttachmentId();
+          const attachment = {
+            id,
+            type: image.type || "image/png",
+            data: null,
+            blob: image,
+            pending: null,
+            error: false
+          };
+          file.attachments.set(id, attachment);
+          return { attachment, image };
+        });
+
+        editor.insertMD(attachments
+          .map(({ attachment }) => `![Pasted image](${attachmentPath(attachment.id)})`)
+          .join("\n\n"));
+        file.text = canonicalEditorText(editor.getValue(), file);
+        file.dirty = true;
+        renderFiles();
+        scheduleAttachmentPreviews();
+        scheduleAutoSave(file);
+        updateStatus(images.length === 1 ? "Embedding pasted image…" : `Embedding ${images.length} images…`);
+
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        const results = await Promise.all(attachments.map(({ attachment, image }) =>
+          processPastedAttachment(file, attachment, image)));
+
+        if (activeFile() === file && results.every(Boolean)) {
+          updateStatus(images.length === 1
+            ? "Image embedded in Markdown"
+            : `${images.length} images embedded in Markdown`);
+        }
+        renderFiles();
+        scheduleAutoSave(file);
+        return null;
       }
 
       function handleEditorKeydown(event) {
@@ -371,130 +707,6 @@
         editor.vditor.undo.redo(editor.vditor);
       }
 
-      function selectedEditorRange() {
-        const selection = getSelection();
-        if (!selection.rangeCount) return null;
-        const range = selection.getRangeAt(0);
-        return editorElement.contains(range.commonAncestorContainer) ? range.cloneRange() : null;
-      }
-
-      function restoreEditorRange(range) {
-        if (!range) {
-          editor.focus();
-          return;
-        }
-        const selection = getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-      }
-
-      function releaseLocalImageUrls(fileId) {
-        for (const [key, url] of localImageUrls) {
-          if (!fileId || key.startsWith(`${fileId}\n`)) {
-            URL.revokeObjectURL(url);
-            localImageUrls.delete(key);
-          }
-        }
-      }
-
-      function relativeImagePath(source) {
-        if (!source || /^(?:[a-z][a-z\d+.-]*:|[\\/#])/i.test(source)) return null;
-        const withoutQuery = source.split(/[?#]/, 1)[0];
-        let decoded;
-        try { decoded = decodeURIComponent(withoutQuery); } catch { decoded = withoutQuery; }
-        const parts = decoded.replace(/\\/g, "/").split("/").filter(part => part && part !== ".");
-        return parts.length && !parts.includes("..") ? parts : null;
-      }
-
-      async function fileHandleAtPath(directoryHandle, parts) {
-        let current = directoryHandle;
-        for (const part of parts.slice(0, -1)) {
-          current = await current.getDirectoryHandle(part);
-        }
-        return current.getFileHandle(parts.at(-1));
-      }
-
-      async function refreshLocalImagePreviews() {
-        if (!editorReady) return;
-        const file = activeFile();
-        if (file.builtin || !file.directoryHandle) return;
-        const images = editorElement.querySelectorAll(".vditor-ir img[src], .vditor-wysiwyg img[src]");
-        for (const image of images) {
-          const parts = relativeImagePath(image.getAttribute("src"));
-          if (!parts || activeFile() !== file) continue;
-          const path = parts.join("/");
-          const key = `${file.id}\n${path}`;
-          let url = localImageUrls.get(key);
-          if (!url) {
-            try {
-              const handle = await fileHandleAtPath(file.directoryHandle, parts);
-              url = URL.createObjectURL(await handle.getFile());
-              localImageUrls.set(key, url);
-            } catch {
-              continue;
-            }
-          }
-          image.src = url;
-        }
-      }
-
-      function scheduleLocalImagePreviews() {
-        clearTimeout(imagePreviewTimer);
-        imagePreviewTimer = setTimeout(() => {
-          imagePreviewTimer = null;
-          void refreshLocalImagePreviews();
-        }, 0);
-      }
-
-      async function pasteLocalImages(event) {
-        const images = clipboardImageFiles(event);
-        if (!images.length || !editorReady) return;
-        const range = selectedEditorRange();
-        event.preventDefault();
-        event.stopImmediatePropagation();
-
-        const file = activeFile();
-        if (file.builtin) {
-          updateStatus("Create or open a Markdown file before pasting images");
-          return;
-        }
-        if (!file.handle) {
-          await saveActiveFile();
-          if (!file.handle || activeFile() !== file) return;
-        }
-        if (!file.directoryHandle) {
-          updateStatus(`Choose the folder containing ${file.name}…`);
-          const directoryHandle = await pickContainingDirectory(file);
-          if (!directoryHandle || activeFile() !== file) return;
-          file.directoryHandle = directoryHandle;
-        }
-
-        const directoryHandle = file.directoryHandle;
-        updateStatus(images.length === 1 ? "Saving pasted image…" : `Saving ${images.length} pasted images…`);
-
-        const names = [];
-        try {
-          for (const image of images) {
-            names.push(await savePastedImage(directoryHandle, image));
-          }
-        } catch {
-          await Promise.allSettled(names.map(name => directoryHandle.removeEntry(name)));
-          updateStatus("Could not save pasted image");
-          return;
-        }
-
-        restoreEditorRange(range);
-        editor.insertMD(names.map(name => `![Pasted image](${name})`).join("\n\n"));
-        file.text = editor.getValue();
-        file.dirty = true;
-        scheduleAutoSave(file);
-        renderFiles();
-        scheduleLocalImagePreviews();
-        updateStatus(names.length === 1
-          ? `Image saved as ${names[0]}; autosaving Markdown…`
-          : `${names.length} images saved; autosaving Markdown…`);
-      }
-
       async function writeText(handle, text) {
         const writable = await handle.createWritable();
         await writable.write(text);
@@ -505,23 +717,6 @@
         const timer = autoSaveTimers.get(file.id);
         if (timer) clearTimeout(timer);
         autoSaveTimers.delete(file.id);
-      }
-
-      async function pickMarkdownDirectory() {
-        if (typeof window.showDirectoryPicker !== "function") {
-          updateStatus("Opening local folders requires Chrome");
-          return null;
-        }
-        try {
-          return await window.showDirectoryPicker({
-            id: "LocalMarkdownFileFolder",
-            mode: "readwrite"
-          });
-        } catch (error) {
-          if (error?.name === "AbortError") updateStatus();
-          else updateStatus("Could not choose folder");
-          return null;
-        }
       }
 
       async function pickMarkdownFile(file) {
@@ -546,18 +741,6 @@
         }
       }
 
-      async function pickContainingDirectory(file) {
-        const directoryHandle = await pickMarkdownDirectory();
-        if (!directoryHandle || !file.handle) return directoryHandle;
-        try {
-          const candidate = await directoryHandle.getFileHandle(file.handle.name);
-          if (typeof file.handle.isSameEntry !== "function"
-              || await file.handle.isSameEntry(candidate)) return directoryHandle;
-        } catch {}
-        updateStatus(`Choose the folder containing ${file.name}`);
-        return null;
-      }
-
       async function saveFile(file) {
         if (file.builtin || !file.handle) return false;
         const currentSave = activeSaves.get(file.id);
@@ -567,9 +750,11 @@
         }
 
         const operation = (async () => {
+          if (!await waitForFileAttachments(file)) return false;
           const text = file.text;
+          const storedText = serializeFile(file);
           try {
-            await writeText(file.handle, text);
+            await writeText(file.handle, storedText);
             file.name = file.handle.name;
             if (file.text === text) file.dirty = false;
             return true;
@@ -666,10 +851,11 @@
         updateStatus("Opening Markdown file…");
         try {
           const file = await handle.getFile();
+          const parsed = parseStoredMarkdown(await file.text());
           activateFile({
-            id: createId(), name: file.name, text: await file.text(), handle,
-            directoryHandle: null, builtin: false, dirty: false
-          }, "Opened local file");
+            id: createId(), name: file.name, text: parsed.text, handle,
+            attachments: parsed.attachments, builtin: false, dirty: false
+          }, parsed.warning || "Opened local file");
         } catch {
           updateStatus("Could not open file");
         }
@@ -680,8 +866,7 @@
         const name = nextUntitledName();
         const file = {
           id: createId(), name, text: `# ${name.replace(/\.md$/i, "")}`,
-          handle: null, directoryHandle: null,
-          builtin: false, dirty: true
+          handle: null, attachments: new Map(), builtin: false, dirty: true
         };
         activateFile(file);
         editor?.focus();
@@ -691,7 +876,6 @@
       document.querySelector("#LocalMarkdown-open-file").addEventListener("click", openLocalFile);
       document.querySelector("#LocalMarkdown-save-file").addEventListener("click", saveActiveFile);
       editorElement.addEventListener("keydown", handleEditorKeydown, true);
-      editorElement.addEventListener("paste", pasteLocalImages, true);
 
       closeButton.addEventListener("click", async () => {
         captureEditorValue();
@@ -711,7 +895,7 @@
         }
 
         cancelAutoSave(file);
-        releaseLocalImageUrls(file.id);
+        releaseAttachmentPreviews(file.id);
         session.files = session.files.filter(item => item !== file && !item.welcome);
         let next = session.files.find(item => !item.builtin) || session.files[0];
         if (!next) {
@@ -742,27 +926,40 @@
         counter: { enable: false },
         outline: { enable: false },
         resize: { enable: false },
+        upload: {
+          multiple: true,
+          handler: pasteEmbeddedImages
+        },
         theme: "classic",
         lang: "en_US",
         placeholder: "Write Markdown…",
         input(value) {
           const file = activeFile();
-          if (value === file.text) return;
-          file.text = value;
+          const canonical = canonicalEditorText(value, file);
+          if (canonical === file.text) return;
+          file.text = canonical;
           if (!file.builtin) {
             file.dirty = true;
             scheduleAutoSave(file);
           }
           renderFiles();
           updateStatus();
-          scheduleLocalImagePreviews();
+          scheduleAttachmentPreviews();
         },
         after() {
           editorReady = true;
+          observeAttachmentPreviews();
           editor.setValue(activeFile().text, true);
           updateStatus();
-          scheduleLocalImagePreviews();
+          scheduleAttachmentPreviews();
         }
+      });
+
+      addEventListener("unload", () => {
+        attachmentPreviewObserver?.disconnect();
+        releaseAttachmentPreviews();
+        imageWorker?.terminate();
+        if (imageWorkerUrl) URL.revokeObjectURL(imageWorkerUrl);
       });
     })();
   </script>

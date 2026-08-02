@@ -10,23 +10,24 @@ Local Markdown is a lightweight, zero-install Markdown editor for everyday notes
 - Keep files on your computer instead of in browser local storage.
 - Show **Save** only until a new file is saved for the first time.
 - Autosave opened or previously saved files.
-- Paste clipboard images into the folder containing the current Markdown file.
-- Give pasted images timestamp-ordered PNG or JPEG filenames.
+- Paste clipboard images without granting Chrome access to a containing folder.
+- Keep pasted images inside the same Markdown file while the editor uses short attachment links for fast rendering.
 - View built-in Markdown examples and keyboard shortcuts.
 
 ## Use Local Markdown
 
 1. Download `local-markdown.html`.
-2. Put `dog.png` beside `local-markdown.html` to display the current image example.
-3. Open `local-markdown.html` in Chrome.
-4. Select **Open file** to add an existing `.md` or `.markdown` file to the left sidebar, or select **+** to add a new file.
-5. For a new file, select **Save** once, edit the `.md` filename if needed, and choose its folder. The Save button then disappears and later changes save automatically.
+2. Open `local-markdown.html` in Chrome.
+3. Select **Open file** to add an existing `.md` or `.markdown` file to the left sidebar, or select **+** to add a new file.
+4. For a new file, select **Save** once, edit the `.md` filename if needed, and choose its folder. The Save button then disappears and later changes save automatically.
 
-Select a filename in the left sidebar to switch the active editor. Local Markdown asks Chrome for access only to the file or folder you select. Your Markdown files and pasted images remain local.
+Select a filename in the left sidebar to switch the active editor. Local Markdown asks Chrome for access only to the file you select. Your Markdown files remain local.
 
 ## Pasting images
 
-Paste an image into the current note. For a directly opened file, Chrome does not reveal its parent folder, so Local Markdown asks you to select that file's folder the first time an image needs to be saved. It verifies the folder, saves the image there, and inserts a relative Markdown image link. Filenames begin with a timestamp so earlier images sort before later images.
+Paste an image into the current note. Local Markdown immediately previews the clipboard image from memory, then compresses it to WebP in the background when that reduces its size. The Markdown body contains a short `local-markdown-attachment/…` image link; the Base64-encoded image data is stored in a `LocalMarkdown attachments:v1` block at the end of the same `.md` file.
+
+The attachment block is kept out of Vditor while editing, so large Base64 strings do not slow down normal Markdown parsing and rendering. Opening and saving an individual Markdown file still works without granting Chrome access to its containing folder. Other Markdown viewers do not know how to resolve the short attachment links, so embedded images are guaranteed to render in Local Markdown rather than in every third-party viewer.
 
 ## Browser and network requirements
 
@@ -36,4 +37,3 @@ Local Markdown is designed for desktop Chrome because it uses Chrome's File Syst
 
 - `local-markdown.html` — the Local Markdown application.
 - `README.md` — project documentation.
-- `dog.png` — the image used by the built-in Markdown example; keep it in the same folder as `local-markdown.html` when distributing the example.
