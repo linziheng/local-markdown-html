@@ -21,7 +21,8 @@
     .LocalMarkdown-app { height: 100%; display: grid; grid-template-columns: 220px minmax(0, 1fr); }
     .LocalMarkdown-sidebar { min-width: 0; overflow: auto; border-right: 1px solid #e5e5e5; }
     .LocalMarkdown-sidebar-header,
-    .LocalMarkdown-toolbar { height: 52px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid #e5e5e5; }
+    .LocalMarkdown-toolbar { height: 52px; padding: 0 12px; border-bottom: 1px solid #e5e5e5; }
+    .LocalMarkdown-sidebar-header { display: flex; align-items: center; gap: 8px; }
     .LocalMarkdown-sidebar-header strong { flex: 1; }
     .LocalMarkdown-new { width: 30px; height: 30px; padding: 0; font-size: 20px; line-height: 1; }
     .LocalMarkdown-files { padding: 8px; }
@@ -30,27 +31,61 @@
       border: 0; text-align: left; text-overflow: ellipsis; white-space: nowrap;
     }
     .LocalMarkdown-file[aria-current="true"] { background: #f1f1f1; font-weight: 600; }
+    .LocalMarkdown-examples { margin-bottom: 9px; }
 
     .LocalMarkdown-main { min-width: 0; min-height: 0; display: grid; grid-template-rows: 52px minmax(0, 1fr); }
-    .LocalMarkdown-toolbar { justify-content: flex-end; }
-    .LocalMarkdown-status { margin-right: auto; color: #666; font-size: 13px; }
+    .LocalMarkdown-toolbar {
+      display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      align-items: center; gap: 12px;
+    }
+    .LocalMarkdown-status {
+      min-width: 0; overflow: hidden; color: #666; font-size: 13px;
+      text-overflow: ellipsis; white-space: nowrap;
+    }
+    .LocalMarkdown-view-switcher {
+      display: inline-flex; overflow: hidden; justify-self: center;
+      border: 1px solid #d8d8d8; border-radius: 6px;
+    }
+    .LocalMarkdown-view {
+      padding: 5px 10px; border: 0; border-radius: 0; font-size: 13px; white-space: nowrap;
+    }
+    .LocalMarkdown-view + .LocalMarkdown-view { border-left: 1px solid #d8d8d8; }
+    .LocalMarkdown-view[aria-pressed="true"],
+    .LocalMarkdown-view[aria-pressed="true"]:hover { background: #e9e9e9; font-weight: 600; }
+    .LocalMarkdown-actions { display: flex; align-items: center; justify-self: end; gap: 8px; }
     .LocalMarkdown-action { padding: 5px 10px; }
     .LocalMarkdown-editor { min-width: 0; min-height: 0; overflow: hidden; }
 
     .LocalMarkdown-editor .vditor { height: 100% !important; border: 0; border-radius: 0; }
-    .LocalMarkdown-editor .vditor-toolbar,
+    .LocalMarkdown-editor .vditor-toolbar {
+      flex-shrink: 0; padding: 6px 12px;
+      border: 0; border-bottom: 1px solid #e5e5e5; background: #fafafa;
+    }
+    .LocalMarkdown-internal-edit-mode { display: none !important; }
     .LocalMarkdown-editor .vditor-counter,
     .LocalMarkdown-editor .vditor-resize { display: none !important; }
-    .LocalMarkdown-editor .vditor-content { height: 100% !important; }
-    .LocalMarkdown-editor .vditor-ir { width: min(820px, 100%); margin: 0 auto; padding: 42px 40px 120px !important; background: #fff; }
+    .LocalMarkdown-editor .vditor-content { flex: 1; min-height: 0; height: auto !important; }
+    .LocalMarkdown-editor .vditor-ir,
+    .LocalMarkdown-editor .vditor-wysiwyg { width: min(820px, 100%); margin: 0 auto; padding: 42px 40px 120px !important; background: #fff; }
     .LocalMarkdown-editor .vditor-reset { color: #111; font-family: inherit; }
+
+    @media (max-width: 900px) {
+      .LocalMarkdown-toolbar { grid-template-columns: auto minmax(0, 1fr); }
+      .LocalMarkdown-status { display: none; }
+      .LocalMarkdown-view-switcher { justify-self: start; }
+      .LocalMarkdown-actions { grid-column: 2; grid-row: 1; }
+    }
 
     @media (max-width: 650px) {
       .LocalMarkdown-app { grid-template-columns: 150px minmax(0, 1fr); }
       .LocalMarkdown-sidebar-header { padding: 0 8px; }
       .LocalMarkdown-toolbar { padding: 0 8px; gap: 5px; }
+      .LocalMarkdown-view { padding: 5px 6px; }
+      .LocalMarkdown-actions { gap: 5px; }
       .LocalMarkdown-action { padding: 5px 7px; }
-      .LocalMarkdown-editor .vditor-ir { padding: 28px 18px 100px !important; }
+      .LocalMarkdown-editor .vditor-toolbar { padding: 6px 8px; }
+      .LocalMarkdown-editor .vditor-ir,
+      .LocalMarkdown-editor .vditor-wysiwyg { padding: 28px 18px 100px !important; }
     }
   </style>
 </head>
@@ -61,16 +96,22 @@
         <strong>Local Markdown</strong>
         <button class="LocalMarkdown-new" id="LocalMarkdown-new" type="button" aria-label="New file">+</button>
       </div>
-      <nav class="LocalMarkdown-files" id="LocalMarkdown-files" aria-label="Open files"></nav>
+      <nav class="LocalMarkdown-files" id="LocalMarkdown-files" aria-label="Documents"></nav>
     </aside>
 
     <main class="LocalMarkdown-main">
       <div class="LocalMarkdown-toolbar">
         <span class="LocalMarkdown-status" id="LocalMarkdown-status" role="status">Loading editor…</span>
-        <button class="LocalMarkdown-action" id="LocalMarkdown-examples" type="button">Examples</button>
-        <button class="LocalMarkdown-action" id="LocalMarkdown-open-file" type="button">Open file</button>
-        <button class="LocalMarkdown-action" id="LocalMarkdown-save-file" type="button">Save</button>
-        <button class="LocalMarkdown-action" id="LocalMarkdown-close-file" type="button">Close</button>
+        <div class="LocalMarkdown-view-switcher" role="group" aria-label="Editor view">
+          <button class="LocalMarkdown-view" type="button" data-mode="wysiwyg" aria-pressed="false" disabled>WYSIWYG</button>
+          <button class="LocalMarkdown-view" type="button" data-mode="ir" aria-pressed="true" disabled>IR</button>
+          <button class="LocalMarkdown-view" type="button" data-mode="sv" aria-pressed="false" disabled>Split</button>
+        </div>
+        <div class="LocalMarkdown-actions">
+          <button class="LocalMarkdown-action" id="LocalMarkdown-open-file" type="button">Open file</button>
+          <button class="LocalMarkdown-action" id="LocalMarkdown-save-file" type="button">Save</button>
+          <button class="LocalMarkdown-action" id="LocalMarkdown-close-file" type="button">Close</button>
+        </div>
       </div>
       <div class="LocalMarkdown-editor" id="LocalMarkdown-editor"></div>
     </main>
@@ -86,6 +127,7 @@
       const closeButton = document.querySelector("#LocalMarkdown-close-file");
       const saveButton = document.querySelector("#LocalMarkdown-save-file");
       const editorElement = document.querySelector("#LocalMarkdown-editor");
+      const viewButtons = document.querySelectorAll(".LocalMarkdown-view");
       let editor = null;
       let editorReady = false;
       let attachmentPreviewTimer = null;
@@ -232,7 +274,7 @@
 
       function updateStatus(message = null) {
         const file = activeFile();
-        closeButton.disabled = Boolean(file.welcome);
+        closeButton.disabled = Boolean(file.builtin || file.welcome);
         saveButton.hidden = Boolean(file.builtin || file.welcome || file.handle);
         if (message) statusElement.textContent = message;
         else if (file.welcome) statusElement.textContent = "Open a file or view Examples";
@@ -242,6 +284,15 @@
 
       function renderFiles() {
         filesElement.replaceChildren();
+        const examplesButton = document.createElement("button");
+        examplesButton.id = "LocalMarkdown-examples";
+        examplesButton.type = "button";
+        examplesButton.className = "LocalMarkdown-file LocalMarkdown-examples";
+        examplesButton.textContent = "Examples";
+        examplesButton.setAttribute("aria-current", String(example.id === session.activeId));
+        examplesButton.addEventListener("click", showExamples);
+        filesElement.append(examplesButton);
+
         for (const file of session.files) {
           if (file.builtin) continue;
           const button = document.createElement("button");
@@ -279,6 +330,33 @@
         example.text = exampleText;
         example.attachments.clear();
         activateFile(example);
+      }
+
+      function updateViewButtons(mode = "ir") {
+        for (const button of viewButtons) {
+          button.setAttribute("aria-pressed", String(button.dataset.mode === mode));
+        }
+      }
+
+      function switchEditorMode(mode) {
+        if (!editorReady || editor.getCurrentMode() === mode) return;
+        captureEditorValue();
+        const editModeElement = editor.vditor?.toolbar?.elements?.["edit-mode"];
+        const modeButton = editModeElement?.querySelector(`button[data-mode="${mode}"]`);
+        if (!modeButton) {
+          updateStatus("Could not change editor view");
+          return;
+        }
+
+        modeButton.click();
+        const currentMode = editor.getCurrentMode();
+        updateViewButtons(currentMode);
+        if (currentMode !== mode) {
+          updateStatus("Could not change editor view");
+          return;
+        }
+        scheduleAttachmentPreviews();
+        editor.focus();
       }
 
       function noteTitle(file) {
@@ -707,6 +785,17 @@
         editor.vditor.undo.redo(editor.vditor);
       }
 
+      function handleEditorViewShortcut(event) {
+        const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+        const commandKey = isMac ? event.metaKey : event.ctrlKey;
+        if (!editorReady || !commandKey || !event.altKey || event.shiftKey) return;
+        const mode = ({ Digit7: "wysiwyg", Digit8: "ir", Digit9: "sv" })[event.code];
+        if (!mode) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        switchEditorMode(mode);
+      }
+
       async function writeText(handle, text) {
         const writable = await handle.createWritable();
         await writable.write(text);
@@ -872,15 +961,18 @@
         editor?.focus();
       });
 
-      document.querySelector("#LocalMarkdown-examples").addEventListener("click", showExamples);
       document.querySelector("#LocalMarkdown-open-file").addEventListener("click", openLocalFile);
       document.querySelector("#LocalMarkdown-save-file").addEventListener("click", saveActiveFile);
+      for (const button of viewButtons) {
+        button.addEventListener("click", () => switchEditorMode(button.dataset.mode));
+      }
+      editorElement.addEventListener("keydown", handleEditorViewShortcut, true);
       editorElement.addEventListener("keydown", handleEditorKeydown, true);
 
       closeButton.addEventListener("click", async () => {
         captureEditorValue();
         const file = activeFile();
-        if (file.welcome) return;
+        if (file.builtin || file.welcome) return;
         if (!file.builtin && file.dirty) {
           cancelAutoSave(file);
           if (file.handle) {
@@ -915,13 +1007,32 @@
       renderFiles();
       updateStatus();
 
+      function toolbarControl(name, tipPosition = "s") {
+        return { name, tipPosition };
+      }
+
       editor = new Vditor("LocalMarkdown-editor", {
         cdn: vditorCdn,
         mode: "ir",
         value: example.text,
         height: "100%",
         minHeight: 200,
-        toolbar: [],
+        toolbar: [
+          toolbarControl("emoji", "se"), toolbarControl("headings", "se"),
+          toolbarControl("bold", "se"), toolbarControl("italic", "se"),
+          toolbarControl("strike", "se"), toolbarControl("link"), "|",
+          toolbarControl("list"), toolbarControl("ordered-list"), toolbarControl("check"),
+          toolbarControl("outdent"), toolbarControl("indent"), "|",
+          toolbarControl("quote"), toolbarControl("line"), toolbarControl("code"),
+          toolbarControl("inline-code"), toolbarControl("insert-before"),
+          toolbarControl("insert-after"), "|", toolbarControl("upload"),
+          toolbarControl("table"), "|",
+          toolbarControl("undo", "sw"), toolbarControl("redo", "sw"), "|",
+          toolbarControl("fullscreen", "sw"),
+          toolbarControl("outline", "sw"), toolbarControl("export", "sw"),
+          { name: "edit-mode", className: "LocalMarkdown-internal-edit-mode" }
+        ],
+        customWysiwygToolbar() {},
         cache: { enable: false },
         counter: { enable: false },
         outline: { enable: false },
@@ -948,6 +1059,8 @@
         },
         after() {
           editorReady = true;
+          for (const button of viewButtons) button.disabled = false;
+          updateViewButtons(editor.getCurrentMode());
           observeAttachmentPreviews();
           editor.setValue(activeFile().text, true);
           updateStatus();
