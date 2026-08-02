@@ -4,14 +4,6 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Local Markdown</title>
-  <meta name="description" content="Open, edit, and save local Markdown files directly in your browser. No install, account, or folder access required.">
-  <meta name="theme-color" content="#ffffff">
-  <meta property="og:type" content="website">
-  <meta property="og:title" content="Local Markdown — edit local .md files in your browser">
-  <meta property="og:description" content="A zero-install Markdown editor that saves directly to files on your computer.">
-  <meta property="og:url" content="https://linziheng.github.io/local-markdown-html/">
-  <meta property="og:image" content="https://linziheng.github.io/local-markdown-html/social-preview.png">
-  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3.5' y='6.5' width='25' height='19' rx='3.5' fill='white' stroke='%23111' stroke-width='2'/%3E%3Cpath d='M7.5 21V11.5l4.7 4.7 4.4-4.7V21m6-9.5V21m-3-3 3 3 3-3' fill='none' stroke='%23111' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vditor@3.11.2/dist/index.css">
   <style>
@@ -28,10 +20,7 @@
     button:focus-visible { outline: 2px solid #111; outline-offset: 2px; }
 
     .LocalMarkdown-app { height: 100%; display: grid; grid-template-columns: 220px minmax(0, 1fr); }
-    .LocalMarkdown-sidebar {
-      min-width: 0; min-height: 0; overflow: hidden; border-right: 1px solid #e5e5e5;
-      display: grid; grid-template-rows: 40px minmax(0, 1fr) auto;
-    }
+    .LocalMarkdown-sidebar { min-width: 0; overflow: auto; border-right: 1px solid #e5e5e5; }
     .LocalMarkdown-sidebar-header,
     .LocalMarkdown-toolbar { height: 40px; padding: 0 10px; border-bottom: 1px solid #e5e5e5; }
     .LocalMarkdown-sidebar-header { display: flex; align-items: center; gap: 8px; }
@@ -41,20 +30,13 @@
       width: 30px; height: 30px; padding: 0; border: 0; border-radius: 3px;
       background: transparent; font-size: 20px; line-height: 1;
     }
-    .LocalMarkdown-files { min-height: 0; overflow: auto; padding: 8px; }
+    .LocalMarkdown-files { padding: 8px; }
     .LocalMarkdown-file {
       width: 100%; margin: 0 0 3px; padding: 8px 9px; overflow: hidden;
       border: 0; text-align: left; text-overflow: ellipsis; white-space: nowrap;
     }
     .LocalMarkdown-file[aria-current="true"] { background: #f1f1f1; font-weight: 600; }
     .LocalMarkdown-examples { margin-bottom: 9px; }
-    .LocalMarkdown-sidebar-footer {
-      padding: 9px 10px 10px; border-top: 1px solid #e5e5e5;
-      color: #777; font-size: 11px; line-height: 1.45;
-    }
-    .LocalMarkdown-sidebar-links { display: flex; flex-wrap: wrap; gap: 5px 10px; margin-bottom: 4px; }
-    .LocalMarkdown-sidebar-link { color: #333; text-decoration: none; }
-    .LocalMarkdown-sidebar-link:hover { text-decoration: underline; }
 
     .LocalMarkdown-main { min-width: 0; min-height: 0; display: grid; grid-template-rows: 40px minmax(0, 1fr); }
     .LocalMarkdown-toolbar {
@@ -77,42 +59,7 @@
     .LocalMarkdown-action {
       padding: 4px 7px; border: 0; border-radius: 3px; background: transparent; font-size: 13px;
     }
-    .LocalMarkdown-editor-shell { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
-    .LocalMarkdown-editor { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
-
-    .LocalMarkdown-welcome {
-      position: absolute; z-index: 20; inset: 0; display: grid; place-items: center; padding: 24px;
-      background: rgba(255, 255, 255, .82); backdrop-filter: blur(5px);
-    }
-    .LocalMarkdown-welcome[hidden] { display: none; }
-    .LocalMarkdown-welcome-card {
-      position: relative; width: min(540px, 100%); padding: 32px;
-      border: 1px solid #dedede; border-radius: 12px; background: #fff;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, .12);
-    }
-    .LocalMarkdown-welcome-close {
-      position: absolute; top: 10px; right: 10px; width: 32px; height: 32px; padding: 0;
-      border: 0; background: transparent; color: #777; font-size: 22px; line-height: 1;
-    }
-    .LocalMarkdown-welcome-eyebrow {
-      margin: 0 0 8px; color: #666; font-size: 12px; font-weight: 650;
-      letter-spacing: .08em; text-transform: uppercase;
-    }
-    .LocalMarkdown-welcome h1 { margin: 0 34px 10px 0; font-size: clamp(28px, 5vw, 40px); line-height: 1.08; }
-    .LocalMarkdown-welcome-copy { margin: 0 0 20px; color: #444; font-size: 16px; }
-    .LocalMarkdown-welcome-actions { display: flex; flex-wrap: wrap; gap: 9px; }
-    .LocalMarkdown-welcome-action {
-      min-height: 40px; padding: 8px 13px; border: 1px solid #ccc; border-radius: 5px;
-      display: inline-flex; align-items: center; color: #111; background: #fff; text-decoration: none;
-    }
-    .LocalMarkdown-welcome-action:hover { background: #f5f5f5; }
-    .LocalMarkdown-welcome-primary { border-color: #111; color: #fff; background: #111; }
-    .LocalMarkdown-welcome-primary:hover { background: #2c2c2c; }
-    .LocalMarkdown-welcome-note { margin: 18px 0 0; color: #777; font-size: 12px; }
-    .LocalMarkdown-welcome-browser-warning {
-      margin: 14px 0 0; padding: 9px 10px; border-radius: 5px;
-      color: #6c4b00; background: #fff5d6; font-size: 12px;
-    }
+    .LocalMarkdown-editor { min-width: 0; min-height: 0; overflow: hidden; }
 
     .LocalMarkdown-editor .vditor {
       --toolbar-height: 30px;
@@ -150,9 +97,6 @@
       .LocalMarkdown-view { padding: 4px 5px; }
       .LocalMarkdown-action { padding: 4px 5px; }
       .LocalMarkdown-editor .vditor-toolbar { padding: 0 6px; }
-      .LocalMarkdown-sidebar-footer { padding-right: 8px; padding-left: 8px; }
-      .LocalMarkdown-welcome { padding: 12px; }
-      .LocalMarkdown-welcome-card { padding: 26px 20px 22px; }
     }
   </style>
 </head>
@@ -168,13 +112,6 @@
         <button class="LocalMarkdown-new" id="LocalMarkdown-new" type="button" aria-label="New file">+</button>
       </div>
       <nav class="LocalMarkdown-files" id="LocalMarkdown-files" aria-label="Documents"></nav>
-      <footer class="LocalMarkdown-sidebar-footer">
-        <div class="LocalMarkdown-sidebar-links">
-          <a class="LocalMarkdown-sidebar-link" id="LocalMarkdown-download" href="./local-markdown.html" download="local-markdown.html">Download HTML</a>
-          <a class="LocalMarkdown-sidebar-link" href="https://github.com/linziheng/local-markdown-html" target="_blank" rel="noopener noreferrer">GitHub</a>
-        </div>
-        <span id="LocalMarkdown-runtime-note">Files stay on this device</span>
-      </footer>
     </aside>
 
     <main class="LocalMarkdown-main">
@@ -191,24 +128,7 @@
           <button class="LocalMarkdown-action" id="LocalMarkdown-close-file" type="button">Close</button>
         </div>
       </div>
-      <div class="LocalMarkdown-editor-shell">
-        <div class="LocalMarkdown-editor" id="LocalMarkdown-editor"></div>
-        <section class="LocalMarkdown-welcome" id="LocalMarkdown-welcome-panel" role="dialog" aria-labelledby="LocalMarkdown-welcome-title" hidden>
-          <div class="LocalMarkdown-welcome-card">
-            <button class="LocalMarkdown-welcome-close" id="LocalMarkdown-welcome-close" type="button" aria-label="Close welcome">×</button>
-            <p class="LocalMarkdown-welcome-eyebrow">One HTML file · local-first</p>
-            <h1 id="LocalMarkdown-welcome-title">Edit local Markdown without installing an app.</h1>
-            <p class="LocalMarkdown-welcome-copy">Open and save <code>.md</code> files directly on your computer. No account, server, or folder access required.</p>
-            <div class="LocalMarkdown-welcome-actions">
-              <button class="LocalMarkdown-welcome-action LocalMarkdown-welcome-primary" id="LocalMarkdown-welcome-open" type="button">Open a local file</button>
-              <button class="LocalMarkdown-welcome-action" id="LocalMarkdown-welcome-new" type="button">Create a new file</button>
-              <a class="LocalMarkdown-welcome-action" id="LocalMarkdown-welcome-download" href="./local-markdown.html" download="local-markdown.html">Download HTML</a>
-            </div>
-            <p class="LocalMarkdown-welcome-browser-warning" id="LocalMarkdown-browser-warning" hidden>Direct file access requires desktop Chrome or Edge.</p>
-            <p class="LocalMarkdown-welcome-note">Your document content is not uploaded. An internet connection is currently required to load the editor library.</p>
-          </div>
-        </section>
-      </div>
+      <div class="LocalMarkdown-editor" id="LocalMarkdown-editor"></div>
     </main>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/vditor@3.11.2/dist/index.min.js"></script>
@@ -223,12 +143,6 @@
       const saveButton = document.querySelector("#LocalMarkdown-save-file");
       const editorElement = document.querySelector("#LocalMarkdown-editor");
       const viewButtons = document.querySelectorAll(".LocalMarkdown-view");
-      const welcomePanel = document.querySelector("#LocalMarkdown-welcome-panel");
-      const welcomeOpenButton = document.querySelector("#LocalMarkdown-welcome-open");
-      const welcomeNewButton = document.querySelector("#LocalMarkdown-welcome-new");
-      const downloadLinks = document.querySelectorAll("#LocalMarkdown-download, #LocalMarkdown-welcome-download");
-      const browserWarning = document.querySelector("#LocalMarkdown-browser-warning");
-      const runtimeNote = document.querySelector("#LocalMarkdown-runtime-note");
       let editor = null;
       let editorReady = false;
       let attachmentPreviewTimer = null;
@@ -252,13 +166,10 @@
       const attachmentPathPrefix = "local-markdown-attachment/";
       const pastedImageMaxDimension = 2000;
       const pastedImageWebpQuality = 0.9;
-      const welcomeStorageKey = "LocalMarkdown-welcome-dismissed:v1";
       const sessionDatabaseName = "LocalMarkdown";
       const sessionStoreName = "workspace";
       const sessionStorageKey = "current:v1";
       const sessionSaveDelay = 200;
-      const supportsFileAccess = typeof window.showOpenFilePicker === "function"
-        && typeof window.showSaveFilePicker === "function";
 
       const exampleText = [
         "# Markdown examples",
@@ -460,7 +371,7 @@
           .then(() => writeStoredSession(snapshot))
           .catch(() => {
             sessionNeedsSave = true;
-            runtimeNote.textContent = "Browser session storage is unavailable";
+            console.warn("Local Markdown could not use browser session storage.");
           });
         return sessionWritePromise;
       }
@@ -531,7 +442,7 @@
         try {
           storedSession = await readStoredSession();
         } catch {
-          runtimeNote.textContent = "Browser session storage is unavailable";
+          console.warn("Local Markdown could not use browser session storage.");
         }
 
         if (storedSession?.version === 1 && Array.isArray(storedSession.files)) {
@@ -554,7 +465,6 @@
           session.activeId = session.files.some(file => file.id === storedSession.activeId)
             ? storedSession.activeId
             : (restoredFiles[0]?.id || example.id);
-          if (restoredFiles.length) runtimeNote.textContent = "Open files are restored after refresh";
           if (refreshedFiles.some(Boolean)) sessionNeedsSave = true;
         }
 
@@ -565,30 +475,6 @@
             scheduleAutoSave(file);
           }
         }
-      }
-
-      function welcomeWasDismissed() {
-        if (new URLSearchParams(location.search).has("welcome")) return false;
-        try {
-          return localStorage.getItem(welcomeStorageKey) === "true";
-        } catch {
-          return false;
-        }
-      }
-
-      function dismissWelcome() {
-        welcomePanel.hidden = true;
-        try {
-          localStorage.setItem(welcomeStorageKey, "true");
-        } catch {}
-      }
-
-      function showWelcomeIfNeeded() {
-        browserWarning.hidden = supportsFileAccess;
-        welcomeOpenButton.disabled = !supportsFileAccess;
-        welcomeNewButton.disabled = !supportsFileAccess;
-        const hasOpenFiles = session.files.some(file => !file.builtin && !file.welcome);
-        if (!hasOpenFiles && !welcomeWasDismissed()) welcomePanel.hidden = false;
       }
 
       function captureEditorValue() {
@@ -1349,19 +1235,6 @@
 
       document.querySelector("#LocalMarkdown-open-file").addEventListener("click", openLocalFile);
       document.querySelector("#LocalMarkdown-save-file").addEventListener("click", saveActiveFile);
-      document.querySelector("#LocalMarkdown-welcome-close").addEventListener("click", dismissWelcome);
-      welcomeOpenButton.addEventListener("click", () => {
-        dismissWelcome();
-        openLocalFile();
-      });
-      welcomeNewButton.addEventListener("click", () => {
-        dismissWelcome();
-        createNewFile();
-      });
-      for (const link of downloadLinks) {
-        if (location.protocol === "file:") link.hidden = true;
-      }
-      if (location.protocol === "file:") runtimeNote.textContent = "Running locally · files stay on this device";
       for (const button of viewButtons) {
         button.addEventListener("click", () => switchEditorMode(button.dataset.mode));
       }
@@ -1479,7 +1352,6 @@
           editor.setValue(activeFile().text, true);
           updateStatus();
           scheduleAttachmentPreviews();
-          showWelcomeIfNeeded();
         }
       });
 
