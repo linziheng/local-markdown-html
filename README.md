@@ -22,7 +22,7 @@ Open Local Markdown in desktop Chrome or Edge, choose a Markdown file, and start
 ## Features
 
 - Visual, Markdown, and Split editing views
-- Multiple open files in a simple sidebar
+- Multiple open files in a collapsible, responsive sidebar
 - Workspace and unsaved edit recovery after refresh
 - Screenshot and copied image pasting
 - Formatting toolbar, keyboard shortcuts, outline, and export
