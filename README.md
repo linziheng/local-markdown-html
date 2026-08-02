@@ -7,7 +7,7 @@ Local Markdown is a small, zero-install editor for local Markdown files. Open on
 - No installation, account, server, or build step.
 - Open individual `.md` and `.markdown` files without granting access to an entire folder.
 - Keep several files open in the sidebar and switch between them.
-- Switch between WYSIWYG, instant-rendering, and split views from the top toolbar.
+- Switch between Visual, Markdown, and Split views from the top toolbar.
 - Autosave files after their first save.
 - Paste screenshots and copied images directly into the same Markdown file.
 - Use normal external image URLs when you want standard Markdown compatibility.
@@ -38,11 +38,11 @@ The built-in **Examples** page is pinned at the top of the sidebar and shows com
 
 The selector in the center of the top toolbar shows all three editor views:
 
-- **WYSIWYG** displays fully rendered content while you edit.
-- **IR** uses instant rendering and is selected by default.
+- **Visual** displays fully rendered content while you edit.
+- **Markdown** edits Markdown with inline formatting and is selected by default.
 - **Split** shows Markdown source and its rendered preview side by side.
 
-The selected view stays active when you switch between open files. Reloading Local Markdown returns to IR.
+The selected view stays active when you switch between open files. Reloading Local Markdown returns to Markdown.
 
 The formatting toolbar directly below the top bar provides headings, emphasis, links, lists, quotes, code, image upload, tables, undo/redo, and other common Markdown actions. **Outline** and **Export** are available at the right end of the toolbar.
 
