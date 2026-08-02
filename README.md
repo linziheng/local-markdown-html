@@ -4,19 +4,19 @@
 
 <h1 align="center">Local Markdown</h1>
 
-<p align="center">A lightweight Markdown editor in one HTML file.</p>
+<p align="center">A lightweight browser-based Markdown editor for local files.</p>
 
 <p align="center">
-  <a href="https://github.com/linziheng/local-markdown-html/raw/refs/heads/main/local-markdown.html">Download local-markdown.html</a>
+  <a href="https://linziheng.github.io/local-markdown-html/"><strong>Open Local Markdown</strong></a>
 </p>
 
-Open the HTML file in desktop Chrome, choose a Markdown file, and start writing. You do not need to install an app or create an account. Local Markdown saves changes directly to files on your computer.
+Open Local Markdown in desktop Chrome or Edge, choose a Markdown file, and start writing. You do not need to download an app or create an account. Local Markdown saves changes directly to files on your computer.
 
 ## Get started
 
-1. Download `local-markdown.html` from the link above.
-2. Open it in desktop Chrome or Edge.
-3. Select **Open** for an existing `.md` file, or select **+** to create one.
+1. Open the [online editor](https://linziheng.github.io/local-markdown-html/) in desktop Chrome or Edge.
+2. Select **Open** for an existing `.md` file, or select **+** to create one.
+3. Grant access to the file when your browser asks.
 4. Select **Save** once for a new file. After that, changes save automatically.
 
 ## Features
@@ -32,6 +32,12 @@ Pasted images are stored inside the Markdown file with Local Markdown's attachme
 
 ## Privacy and browser support
 
-Local Markdown does not upload your documents. It keeps a local browser copy so it can restore your workspace after a refresh. The editor runs best in desktop Chrome or Chromium-based Edge.
+The editor is delivered by GitHub Pages, but your documents are not uploaded to GitHub or another server. Your browser grants access only to the files you choose. Local Markdown also keeps a browser-local copy so it can restore your workspace after a refresh.
 
-An internet connection is required to load Vditor from jsDelivr. The project does not yet bundle Vditor for fully offline use.
+The File System Access API works best in desktop Chrome or Chromium-based Edge. The browser may ask you to restore file access after a restart.
+
+An internet connection is required to open the editor and load Vditor from jsDelivr.
+
+## Run the standalone file
+
+If you prefer, you can still download [`local-markdown.html`](https://github.com/linziheng/local-markdown-html/raw/refs/heads/main/local-markdown.html) and open it directly in desktop Chrome or Edge.
