@@ -265,6 +265,11 @@
       const sessionStorageKey = "current:v1";
       const sessionSaveDelay = 200;
       const sidebarStorageKey = "LocalMarkdown:sidebar:v1";
+      const markdownPickerId = "LocalMarkdownFile";
+      const markdownPickerTypes = [{
+        description: "Markdown file",
+        accept: { "text/markdown": [".md", ".markdown"] }
+      }];
       const mobileSidebarQuery = matchMedia("(max-width: 650px)");
 
       function setSidebarOpen(open, { persist = true } = {}) {
@@ -1243,21 +1248,25 @@
         autoSaveTimers.delete(file.id);
       }
 
+      function markdownPickerOptions(options = {}) {
+        return {
+          id: markdownPickerId,
+          types: markdownPickerTypes,
+          ...(session.lastOpenHandle ? { startIn: session.lastOpenHandle } : {}),
+          ...options
+        };
+      }
+
       async function pickMarkdownFile(file) {
         if (typeof window.showSaveFilePicker !== "function") {
           updateStatus("Saving local files requires Chrome");
           return null;
         }
         try {
-          return await window.showSaveFilePicker({
-            id: "LocalMarkdownSaveFile",
+          return await window.showSaveFilePicker(markdownPickerOptions({
             suggestedName: suggestedFileName(file),
-            excludeAcceptAllOption: true,
-            types: [{
-              description: "Markdown file",
-              accept: { "text/markdown": [".md", ".markdown"] }
-            }]
-          });
+            excludeAcceptAllOption: true
+          }));
         } catch (error) {
           if (error?.name === "AbortError") updateStatus();
           else updateStatus("Could not choose file name");
@@ -1392,16 +1401,7 @@
 
         let handle;
         try {
-          const pickerOptions = {
-            id: "LocalMarkdownOpenFile",
-            multiple: false,
-            types: [{
-              description: "Markdown file",
-              accept: { "text/markdown": [".md", ".markdown"] }
-            }]
-          };
-          if (session.lastOpenHandle) pickerOptions.startIn = session.lastOpenHandle;
-          [handle] = await window.showOpenFilePicker(pickerOptions);
+          [handle] = await window.showOpenFilePicker(markdownPickerOptions({ multiple: false }));
         } catch (error) {
           if (error?.name === "AbortError") updateStatus();
           else updateStatus("Could not choose file");
