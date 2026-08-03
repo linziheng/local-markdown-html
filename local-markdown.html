@@ -257,7 +257,14 @@
       const autoSaveDelay = 700;
       const attachmentBlockStart = "<!-- LocalMarkdown attachments:v1";
       const attachmentBlockEnd = "-->";
-      const attachmentPathPrefix = "local-markdown-attachment/";
+      const attachmentPathPrefix = "lmd/";
+      const supportedAttachmentPathPrefixes = [
+        attachmentPathPrefix,
+        "local-markdown-attachment/"
+      ];
+      const attachmentPathPrefixPattern = supportedAttachmentPathPrefixes
+        .map(prefix => prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+        .join("|");
       const pastedImageMaxDimension = 2000;
       const pastedImageWebpQuality = 0.9;
       const sessionDatabaseName = "LocalMarkdown";
@@ -821,9 +828,17 @@
         return `Untitled-${Date.now()}.md`;
       }
 
-      function createAttachmentId() {
-        return crypto.randomUUID?.()
-          || `image-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      function createAttachmentId(file) {
+        let id;
+        do {
+          if (typeof crypto.getRandomValues === "function") {
+            const bytes = crypto.getRandomValues(new Uint8Array(6));
+            id = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+          } else {
+            id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+          }
+        } while (file.attachments.has(id));
+        return id;
       }
 
       function attachmentPath(id) {
@@ -873,7 +888,7 @@
 
       function referencedAttachmentIds(text) {
         const ids = new Set();
-        const pattern = /local-markdown-attachment\/([a-z\d-]+)/gi;
+        const pattern = new RegExp(`(?:${attachmentPathPrefixPattern})([a-z\\d-]+)`, "gi");
         for (const match of text.matchAll(pattern)) ids.add(match[1]);
         return ids;
       }
@@ -931,8 +946,10 @@
 
       function attachmentIdFromSource(source) {
         if (!source) return null;
-        const escapedPrefix = attachmentPathPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const match = source.match(new RegExp(`(?:^|/)${escapedPrefix}([a-z\\d-]+)(?:[?#].*)?$`, "i"));
+        const match = source.match(new RegExp(
+          `(?:^|/)(?:${attachmentPathPrefixPattern})([a-z\\d-]+)(?:[?#].*)?$`,
+          "i"
+        ));
         return match?.[1] || null;
       }
 
@@ -1178,7 +1195,7 @@
         }
 
         const attachments = images.map(image => {
-          const id = createAttachmentId();
+          const id = createAttachmentId(file);
           const attachment = {
             id,
             type: image.type || "image/png",
