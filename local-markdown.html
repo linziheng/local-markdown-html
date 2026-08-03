@@ -951,7 +951,9 @@
         if (!editorReady) return;
         const file = activeFile();
         if (!file || file.builtin || !file.attachments.size) return;
-        const images = editorElement.querySelectorAll(".vditor-ir img[src], .vditor-wysiwyg img[src]");
+        const images = editorElement.querySelectorAll(
+          ".vditor-ir img[src], .vditor-wysiwyg img[src], .vditor-preview img[src]"
+        );
         for (const image of images) {
           const id = attachmentImageIds.get(image)
             || attachmentIdFromSource(image.getAttribute("src"));
