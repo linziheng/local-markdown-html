@@ -393,6 +393,8 @@
       const themeOptions = Array.from(document.querySelectorAll(".LocalMarkdown-theme-option"));
       let editor = null;
       let editorReady = false;
+      let irScrollTopBeforeInput = null;
+      let irScrollRestoreFrame = null;
       let attachmentPreviewTimer = null;
       let attachmentPreviewObserver = null;
       let imageWorker = null;
@@ -969,6 +971,27 @@
         for (const button of viewButtons) {
           button.setAttribute("aria-pressed", String(button.dataset.mode === mode));
         }
+      }
+
+      function rememberIrScrollPosition() {
+        if (!editorReady || editor.getCurrentMode() !== "ir") return;
+        const anchor = document.getSelection()?.anchorNode;
+        const element = anchor?.nodeType === 1 ? anchor : anchor?.parentElement;
+        if (!element?.closest?.('.vditor-ir [data-type="code-block"]')) return;
+        const scroller = editorElement.querySelector(".vditor-ir > .vditor-reset");
+        irScrollTopBeforeInput = scroller?.scrollTop ?? null;
+      }
+
+      function restoreIrScrollPosition() {
+        if (irScrollTopBeforeInput === null) return;
+        const scrollTop = irScrollTopBeforeInput;
+        irScrollTopBeforeInput = null;
+        cancelAnimationFrame(irScrollRestoreFrame);
+        irScrollRestoreFrame = requestAnimationFrame(() => {
+          irScrollRestoreFrame = null;
+          const scroller = editorElement.querySelector(".vditor-ir > .vditor-reset");
+          if (scroller) scroller.scrollTop = scrollTop;
+        });
       }
 
       function switchEditorMode(mode) {
@@ -1721,6 +1744,8 @@
       for (const button of viewButtons) {
         button.addEventListener("click", () => switchEditorMode(button.dataset.mode));
       }
+      editorElement.addEventListener("beforeinput", rememberIrScrollPosition, true);
+      editorElement.addEventListener("input", restoreIrScrollPosition);
       editorElement.addEventListener("keydown", handleEditorViewShortcut, true);
       editorElement.addEventListener("keydown", handleEditorKeydown, true);
 
@@ -1886,6 +1911,7 @@
 
       addEventListener("unload", () => {
         attachmentPreviewObserver?.disconnect();
+        cancelAnimationFrame(irScrollRestoreFrame);
         releaseAttachmentPreviews();
         imageWorker?.terminate();
         if (imageWorkerUrl) URL.revokeObjectURL(imageWorkerUrl);
