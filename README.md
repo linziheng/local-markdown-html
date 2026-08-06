@@ -26,10 +26,17 @@ Open Local Markdown in desktop Chrome or Edge, choose a Markdown file, and start
 - Multiple open files in a collapsible, responsive sidebar
 - Workspace and unsaved edit recovery after refresh
 - Screenshot and copied image pasting
+- Editable Excalidraw drawings embedded directly in Markdown files
 - Formatting toolbar, keyboard shortcuts, outline, and export
 - Access only to the files you choose
 
 Pasted images are stored inside the Markdown file with Local Markdown's attachment format. Other editors can read the text but may not display those images. Use standard image URLs when compatibility matters.
+
+## Draw with Excalidraw
+
+Create or open a Markdown file, then select **Draw with Excalidraw** in the formatting toolbar. Select **Insert** when the drawing is ready. Local Markdown embeds an SVG preview and its editable Excalidraw scene inside the Markdown file.
+
+Double-click an embedded drawing to reopen it, then select **Update** to replace the preview without creating a second attachment.
 
 ## Privacy and browser support
 
@@ -37,7 +44,7 @@ The editor is delivered by GitHub Pages, but your documents are not uploaded to 
 
 The File System Access API works best in desktop Chrome or Chromium-based Edge. The browser may ask you to restore file access after a restart.
 
-An internet connection is required to open the editor and load Vditor from jsDelivr.
+An internet connection is required to open the editor and load Vditor from jsDelivr. Excalidraw is loaded from esm.sh only when you open the drawing tool.
 
 ## Run the standalone file
 
