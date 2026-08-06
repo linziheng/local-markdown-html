@@ -103,7 +103,7 @@
     .LocalMarkdown-sidebar {
       min-width: 0; min-height: 0; overflow: hidden; border-right: 1px solid var(--lm-border);
       background: var(--lm-background);
-      display: grid; grid-template-rows: 40px minmax(0, 1fr);
+      display: grid; grid-template-rows: 40px 45px minmax(0, 1fr);
       opacity: 1; visibility: visible;
       transition: opacity 100ms ease, visibility 0s;
     }
@@ -129,6 +129,31 @@
       display: none; width: 30px; height: 30px; padding: 0;
       border: 0; border-radius: 3px; background: transparent;
     }
+    .LocalMarkdown-search {
+      position: relative; display: flex; align-items: center; padding: 7px 8px 6px;
+    }
+    .LocalMarkdown-search svg {
+      position: absolute; left: 17px; width: 15px; height: 15px;
+      color: var(--lm-muted); pointer-events: none;
+    }
+    .LocalMarkdown-search-input {
+      width: 100%; height: 31px; padding: 5px 29px 5px 31px;
+      border: 1px solid var(--lm-control-border); border-radius: 5px;
+      color: var(--lm-text); background: var(--lm-surface); font: inherit; font-size: 13px;
+    }
+    .LocalMarkdown-search-input::placeholder { color: var(--lm-faint); }
+    .LocalMarkdown-search-input::-webkit-search-cancel-button {
+      display: none; -webkit-appearance: none;
+    }
+    .LocalMarkdown-search-input:focus {
+      outline: 0; border-color: var(--lm-accent); box-shadow: 0 0 0 1px var(--lm-accent);
+    }
+    .LocalMarkdown-search-clear {
+      position: absolute; right: 12px; width: 24px; height: 24px; padding: 0;
+      border: 0; border-radius: 3px; color: var(--lm-muted); background: transparent;
+      font-size: 18px; line-height: 1;
+    }
+    .LocalMarkdown-search-clear[hidden] { display: none; }
     .LocalMarkdown-files {
       min-height: 0; overflow: auto; padding: 8px;
       scrollbar-width: none; -ms-overflow-style: none;
@@ -143,6 +168,37 @@
     .LocalMarkdown-file[draggable="true"]:active { cursor: grabbing; }
     .LocalMarkdown-file[aria-current="true"] { background: var(--lm-selected); font-weight: 600; }
     .LocalMarkdown-file.LocalMarkdown-dragging { opacity: 0; }
+    .LocalMarkdown-search-summary,
+    .LocalMarkdown-search-empty {
+      padding: 5px 7px 8px; color: var(--lm-muted); font-size: 12px;
+    }
+    .LocalMarkdown-search-result {
+      margin-bottom: 7px; overflow: hidden;
+      border: 1px solid var(--lm-border); border-radius: 6px;
+    }
+    .LocalMarkdown-search-file,
+    .LocalMarkdown-search-hit {
+      width: 100%; border: 0; border-radius: 0; background: transparent; text-align: left;
+    }
+    .LocalMarkdown-search-file {
+      display: flex; align-items: center; gap: 6px; padding: 7px 8px;
+      font-size: 13px; font-weight: 600;
+    }
+    .LocalMarkdown-search-file[aria-current="true"] { background: var(--lm-selected); }
+    .LocalMarkdown-search-file-name {
+      min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .LocalMarkdown-search-count { flex: 0 0 auto; color: var(--lm-faint); font-size: 11px; font-weight: 400; }
+    .LocalMarkdown-search-hit {
+      display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px;
+      padding: 6px 8px; border-top: 1px solid var(--lm-border);
+      color: var(--lm-muted); font-size: 12px;
+    }
+    .LocalMarkdown-search-line { color: var(--lm-faint); font-variant-numeric: tabular-nums; }
+    .LocalMarkdown-search-snippet { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .LocalMarkdown-search-result mark {
+      padding: 0; color: inherit; background: var(--lm-selection); border-radius: 2px;
+    }
     .LocalMarkdown-main { min-width: 0; min-height: 0; display: grid; grid-template-rows: 40px minmax(0, 1fr); }
     .LocalMarkdown-toolbar {
       display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -378,6 +434,14 @@
         </button>
         <button class="LocalMarkdown-new" id="LocalMarkdown-new" type="button" aria-label="New file">+</button>
       </div>
+      <div class="LocalMarkdown-search" role="search">
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle>
+          <path d="m12.5 12.5 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+        </svg>
+        <input class="LocalMarkdown-search-input" id="LocalMarkdown-search-input" type="search" placeholder="Search" aria-label="Search open files and content" autocomplete="off" spellcheck="false">
+        <button class="LocalMarkdown-search-clear" id="LocalMarkdown-search-clear" type="button" aria-label="Clear search" title="Clear search" hidden>&times;</button>
+      </div>
       <nav class="LocalMarkdown-files" id="LocalMarkdown-files" aria-label="Documents"></nav>
     </aside>
 
@@ -451,6 +515,8 @@
       const sidebarBackdrop = document.querySelector("#LocalMarkdown-sidebar-backdrop");
       const sidebarToggle = document.querySelector("#LocalMarkdown-sidebar-toggle");
       const sidebarDismiss = document.querySelector("#LocalMarkdown-sidebar-dismiss");
+      const searchInput = document.querySelector("#LocalMarkdown-search-input");
+      const searchClear = document.querySelector("#LocalMarkdown-search-clear");
       const mainElement = document.querySelector(".LocalMarkdown-main");
       const statusElement = document.querySelector("#LocalMarkdown-status");
       const closeButton = document.querySelector("#LocalMarkdown-close-file");
@@ -933,6 +999,13 @@
 
       function renderFiles() {
         filesElement.replaceChildren();
+        const query = searchInput.value.trim();
+        searchClear.hidden = !query;
+        if (query) {
+          renderSearchResults(query);
+          return;
+        }
+        filesElement.setAttribute("aria-label", "Documents");
         for (const file of session.files) {
           if (file.welcome) continue;
           const button = document.createElement("button");
@@ -952,6 +1025,225 @@
           enableFileReordering(button, file.id);
           filesElement.append(button);
         }
+      }
+
+      function normalizedSearchText(value) {
+        return String(value || "").toLocaleLowerCase();
+      }
+
+      function fuzzyNameScore(name, query) {
+        const normalizedName = normalizedSearchText(name);
+        const normalizedQuery = normalizedSearchText(query);
+        const directIndex = normalizedName.indexOf(normalizedQuery);
+        if (directIndex !== -1) return directIndex;
+
+        let nameIndex = 0;
+        let gapScore = 0;
+        for (const character of normalizedQuery) {
+          const foundIndex = normalizedName.indexOf(character, nameIndex);
+          if (foundIndex === -1) return null;
+          gapScore += foundIndex - nameIndex;
+          nameIndex = foundIndex + 1;
+        }
+        return 100 + gapScore;
+      }
+
+      function searchableFileText(file) {
+        return String(file.text || "")
+          .replace(/<!-- LocalMarkdown attachments:v1[\s\S]*?-->/gi, "")
+          .replace(/(!?\[[^\]]*\]\()data:image\/[^)]*(\))/gi, "$1$2")
+          .replace(new RegExp(`(!?\\[[^\\]]*\\]\\()(?:${attachmentPathPrefixPattern})[^)]*(\\))`, "gi"), "$1$2");
+      }
+
+      function contentSearchMatches(file, query, limit = 5) {
+        const text = searchableFileText(file);
+        const normalizedQuery = normalizedSearchText(query);
+        const matches = [];
+        let occurrence = 0;
+        let hasMore = false;
+
+        for (const [lineIndex, rawLine] of text.split("\n").entries()) {
+          const normalizedLine = normalizedSearchText(rawLine);
+          const firstMatchIndex = normalizedLine.indexOf(normalizedQuery);
+          if (firstMatchIndex === -1) continue;
+
+          if (matches.length >= limit) {
+            hasMore = true;
+            break;
+          }
+
+          const line = rawLine.trim();
+          const lineMatchIndex = normalizedSearchText(line).indexOf(normalizedQuery);
+          const snippetStart = Math.max(0, lineMatchIndex - 42);
+          const snippetEnd = Math.min(line.length, lineMatchIndex + query.length + 58);
+          matches.push({
+            lineNumber: lineIndex + 1,
+            occurrence,
+            snippet: `${snippetStart ? "…" : ""}${line.slice(snippetStart, snippetEnd)}${snippetEnd < line.length ? "…" : ""}`
+          });
+
+          let lineFromIndex = firstMatchIndex;
+          while (lineFromIndex !== -1) {
+            occurrence += 1;
+            lineFromIndex = normalizedLine.indexOf(
+              normalizedQuery,
+              lineFromIndex + Math.max(1, normalizedQuery.length)
+            );
+          }
+        }
+        return { matches, hasMore };
+      }
+
+      function appendHighlightedText(element, value, query) {
+        const text = String(value || "");
+        const matchIndex = normalizedSearchText(text).indexOf(normalizedSearchText(query));
+        if (matchIndex === -1) {
+          element.textContent = text;
+          return;
+        }
+        element.append(document.createTextNode(text.slice(0, matchIndex)));
+        const mark = document.createElement("mark");
+        mark.textContent = text.slice(matchIndex, matchIndex + query.length);
+        element.append(mark, document.createTextNode(text.slice(matchIndex + query.length)));
+      }
+
+      function renderSearchResults(query) {
+        filesElement.setAttribute("aria-label", `Search results for ${query}`);
+        const results = session.files
+          .filter(file => !file.welcome)
+          .map(file => {
+            const contentResults = contentSearchMatches(file, query);
+            return {
+              file,
+              nameScore: fuzzyNameScore(file === example ? "Examples" : file.name, query),
+              matches: contentResults.matches,
+              hasMoreMatches: contentResults.hasMore
+            };
+          })
+          .filter(result => result.nameScore !== null || result.matches.length)
+          .sort((left, right) => {
+            if (left.nameScore !== null && right.nameScore === null) return -1;
+            if (left.nameScore === null && right.nameScore !== null) return 1;
+            if (left.nameScore !== null && right.nameScore !== null
+                && left.nameScore !== right.nameScore) return left.nameScore - right.nameScore;
+            return session.files.indexOf(left.file) - session.files.indexOf(right.file);
+          });
+
+        if (!results.length) {
+          const empty = document.createElement("div");
+          empty.className = "LocalMarkdown-search-empty";
+          empty.textContent = "No matching files or content";
+          filesElement.append(empty);
+          return;
+        }
+
+        const summary = document.createElement("div");
+        summary.className = "LocalMarkdown-search-summary";
+        summary.textContent = `${results.length} matching ${results.length === 1 ? "file" : "files"}`;
+        filesElement.append(summary);
+
+        for (const { file, nameScore, matches, hasMoreMatches } of results) {
+          const result = document.createElement("div");
+          result.className = "LocalMarkdown-search-result";
+
+          const fileButton = document.createElement("button");
+          fileButton.type = "button";
+          fileButton.className = "LocalMarkdown-search-file";
+          fileButton.setAttribute("aria-current", String(file.id === session.activeId));
+          const name = document.createElement("span");
+          name.className = "LocalMarkdown-search-file-name";
+          const displayName = file === example ? "Examples" : `${file.name}${file.dirty ? " •" : ""}`;
+          if (nameScore !== null) appendHighlightedText(name, displayName, query);
+          else name.textContent = displayName;
+          fileButton.append(name);
+          if (matches.length) {
+            const count = document.createElement("span");
+            count.className = "LocalMarkdown-search-count";
+            count.textContent = hasMoreMatches ? `${matches.length}+` : String(matches.length);
+            fileButton.append(count);
+          }
+          fileButton.addEventListener("click", () => openSearchResult(file));
+          result.append(fileButton);
+
+          for (const match of matches) {
+            const hit = document.createElement("button");
+            hit.type = "button";
+            hit.className = "LocalMarkdown-search-hit";
+            hit.title = `Open ${displayName} at line ${match.lineNumber}`;
+            const line = document.createElement("span");
+            line.className = "LocalMarkdown-search-line";
+            line.textContent = String(match.lineNumber);
+            const snippet = document.createElement("span");
+            snippet.className = "LocalMarkdown-search-snippet";
+            appendHighlightedText(snippet, match.snippet, query);
+            hit.append(line, snippet);
+            hit.addEventListener("click", () => openSearchResult(file, match, query));
+            result.append(hit);
+          }
+          filesElement.append(result);
+        }
+      }
+
+      function nthTextIndex(text, query, occurrence) {
+        const normalizedText = normalizedSearchText(text);
+        const normalizedQuery = normalizedSearchText(query);
+        let fromIndex = 0;
+        for (let index = 0; index <= occurrence; index += 1) {
+          const matchIndex = normalizedText.indexOf(normalizedQuery, fromIndex);
+          if (matchIndex === -1) return -1;
+          if (index === occurrence) return matchIndex;
+          fromIndex = matchIndex + Math.max(1, normalizedQuery.length);
+        }
+        return -1;
+      }
+
+      function revealSearchMatch(query, occurrence) {
+        if (!editorReady) return false;
+        const mode = editor.getCurrentMode();
+        const root = editor.vditor?.[mode]?.element;
+        if (!root) return false;
+
+        const textNodes = [];
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        let node;
+        let text = "";
+        while ((node = walker.nextNode())) {
+          textNodes.push({ node, start: text.length, end: text.length + node.data.length });
+          text += node.data;
+        }
+        const matchIndex = nthTextIndex(text, query, occurrence);
+        if (matchIndex === -1) return false;
+        const matchEnd = matchIndex + query.length;
+        const start = textNodes.find(item => matchIndex >= item.start && matchIndex < item.end);
+        const end = textNodes.find(item => matchEnd > item.start && matchEnd <= item.end);
+        if (!start || !end) return false;
+
+        const range = document.createRange();
+        range.setStart(start.node, matchIndex - start.start);
+        range.setEnd(end.node, matchEnd - end.start);
+        const selection = getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        root.focus({ preventScroll: true });
+        start.node.parentElement?.scrollIntoView({ block: "center", behavior: "smooth" });
+        return true;
+      }
+
+      function openSearchResult(file, match = null, query = searchInput.value.trim()) {
+        captureEditorValue();
+        if (file === example) showExamples();
+        else if (file.id !== session.activeId) activateFile(file);
+        else updateStatus();
+        if (mobileSidebarQuery.matches) setSidebarOpen(false);
+
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (match && query) {
+            const revealed = revealSearchMatch(query, match.occurrence);
+            updateStatus(revealed ? `Match in ${file.name || "Examples"}` : `Opened ${file.name || "Examples"}`);
+          } else {
+            editor?.focus();
+          }
+        }));
       }
 
       function dropAfter(button, event) {
@@ -1999,6 +2291,21 @@
       sidebarToggle.addEventListener("click", toggleSidebar);
       sidebarDismiss.addEventListener("click", () => setSidebarOpen(false));
       sidebarBackdrop.addEventListener("click", () => setSidebarOpen(false));
+      searchInput.addEventListener("input", () => {
+        captureEditorValue();
+        renderFiles();
+      });
+      searchInput.addEventListener("keydown", event => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        searchInput.value = "";
+        renderFiles();
+      });
+      searchClear.addEventListener("click", () => {
+        searchInput.value = "";
+        renderFiles();
+        searchInput.focus();
+      });
       themeToggle.addEventListener("click", () => {
         setThemeMenuOpen(themeToggle.getAttribute("aria-expanded") !== "true", { focus: true });
       });
