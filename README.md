@@ -28,6 +28,7 @@ Open Local Markdown in desktop Chrome or Edge, choose a Markdown file, and start
 - Workspace and unsaved edit recovery after refresh
 - Screenshot and copied image pasting
 - Editable Excalidraw drawings embedded directly in Markdown files
+- Hover controls on table edges for adding and deleting rows and columns
 - Formatting toolbar, keyboard shortcuts, outline, and export
 - Access only to the files you choose
 

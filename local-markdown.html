@@ -319,6 +319,21 @@
     .vditor-reset > :is(h1, h2, h3, h4, h5, h6)::before { content: none !important; }
     .LocalMarkdown-editor img.LocalMarkdown-excalidraw-image { cursor: zoom-in; }
 
+    .LocalMarkdown-table-edge-tools {
+      position: fixed; z-index: 24; display: flex; padding: 2px;
+      border: 1px solid var(--lm-control-border); border-radius: 6px;
+      color: var(--lm-text); background: var(--lm-background);
+      box-shadow: 0 3px 10px var(--lm-menu-shadow);
+    }
+    .LocalMarkdown-table-edge-tools[data-axis="row"] { flex-direction: column; }
+    .LocalMarkdown-table-edge-tools[hidden] { display: none; }
+    .LocalMarkdown-table-edge-tool {
+      width: 23px; height: 23px; padding: 0; display: grid; place-items: center;
+      border: 0; border-radius: 3px; background: transparent;
+      font-size: 17px; line-height: 1;
+    }
+    .LocalMarkdown-table-edge-tool[data-destructive="true"] { color: var(--lm-muted); }
+
     .LocalMarkdown-drawing-dialog {
       width: calc(100vw - 24px); height: calc(100vh - 24px);
       max-width: 1440px; max-height: 960px; padding: 0;
@@ -489,6 +504,14 @@
       <div class="LocalMarkdown-editor" id="LocalMarkdown-editor"></div>
     </main>
   </div>
+  <div class="LocalMarkdown-table-edge-tools" id="LocalMarkdown-table-row-tools" data-axis="row" role="toolbar" aria-label="Row edge actions" aria-controls="LocalMarkdown-editor" hidden>
+    <button class="LocalMarkdown-table-edge-tool" type="button" data-table-action="row-below" aria-label="Add row below" title="Add row below">+</button>
+    <button class="LocalMarkdown-table-edge-tool" type="button" data-table-action="delete-row" data-destructive="true" aria-label="Delete row" title="Delete row">−</button>
+  </div>
+  <div class="LocalMarkdown-table-edge-tools" id="LocalMarkdown-table-column-tools" data-axis="column" role="toolbar" aria-label="Column edge actions" aria-controls="LocalMarkdown-editor" hidden>
+    <button class="LocalMarkdown-table-edge-tool" type="button" data-table-action="column-right" aria-label="Add column to the right" title="Add column to the right">+</button>
+    <button class="LocalMarkdown-table-edge-tool" type="button" data-table-action="delete-column" data-destructive="true" aria-label="Delete column" title="Delete column">−</button>
+  </div>
   <dialog class="LocalMarkdown-drawing-dialog" id="LocalMarkdown-drawing-dialog" aria-labelledby="LocalMarkdown-drawing-title">
     <div class="LocalMarkdown-drawing-shell">
       <header class="LocalMarkdown-drawing-header">
@@ -522,6 +545,12 @@
       const closeButton = document.querySelector("#LocalMarkdown-close-file");
       const saveButton = document.querySelector("#LocalMarkdown-save-file");
       const editorElement = document.querySelector("#LocalMarkdown-editor");
+      const tableRowTools = document.querySelector("#LocalMarkdown-table-row-tools");
+      const tableColumnTools = document.querySelector("#LocalMarkdown-table-column-tools");
+      const tableEdgeTools = [tableRowTools, tableColumnTools];
+      const tableToolButtons = tableEdgeTools.flatMap(tools =>
+        Array.from(tools.querySelectorAll("[data-table-action]")));
+      const deleteTableRowButton = tableRowTools.querySelector('[data-table-action="delete-row"]');
       const viewButtons = document.querySelectorAll(".LocalMarkdown-view");
       const themeToggle = document.querySelector("#LocalMarkdown-theme-toggle");
       const themeMenu = document.querySelector("#LocalMarkdown-theme-menu");
@@ -536,6 +565,7 @@
       let editorReady = false;
       let irScrollTopBeforeInput = null;
       let irScrollRestoreFrame = null;
+      let tableHoverCell = null;
       let attachmentPreviewTimer = null;
       let attachmentPreviewObserver = null;
       let imageWorker = null;
@@ -710,7 +740,7 @@
         "| Split | `⌘ + Option + 9` | `Ctrl + Alt + 9` |",
         "",
         "### Tables",
-        "Place the caret inside a table cell before using these shortcuts.",
+        "Hover the left edge of a row or the top edge of a column to show + and − controls. The same actions are also available with these shortcuts.",
         "",
         "| Action | Mac | Windows |",
         "| --- | --- | --- |",
@@ -1371,6 +1401,7 @@
       function switchEditorMode(mode) {
         if (!editorReady || editor.getCurrentMode() === mode) return;
         captureEditorValue();
+        hideTableEdgeTools();
         const editModeElement = editor.vditor?.toolbar?.elements?.["edit-mode"];
         const modeButton = editModeElement?.querySelector(`button[data-mode="${mode}"]`);
         if (!modeButton) {
@@ -1387,6 +1418,136 @@
         }
         scheduleAttachmentPreviews();
         editor.focus();
+      }
+
+      function tableCellFromNode(node) {
+        const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+        const cell = element?.closest?.("td, th");
+        if (!cell || !editorElement.contains(cell) || !cell.closest(".vditor-ir")) return null;
+        return cell;
+      }
+
+      function hideTableEdgeTools() {
+        for (const tools of tableEdgeTools) tools.hidden = true;
+        tableHoverCell = null;
+      }
+
+      function showTableEdgeTools(axis, cell) {
+        const surface = editorElement.querySelector(".vditor-ir > .vditor-reset");
+        const table = cell.closest("table");
+        if (!surface || !table) {
+          hideTableEdgeTools();
+          return;
+        }
+
+        tableHoverCell = cell;
+        const tools = axis === "row" ? tableRowTools : tableColumnTools;
+        const otherTools = axis === "row" ? tableColumnTools : tableRowTools;
+        otherTools.hidden = true;
+        tools.hidden = false;
+
+        const cellRect = cell.getBoundingClientRect();
+        const tableRect = table.getBoundingClientRect();
+        const surfaceRect = surface.getBoundingClientRect();
+        const toolsRect = tools.getBoundingClientRect();
+        const minTop = Math.max(2, surfaceRect.top);
+        const maxTop = Math.min(innerHeight - toolsRect.height - 2,
+          surfaceRect.bottom - toolsRect.height);
+        let top;
+        let left;
+        if (axis === "row") {
+          const rowRect = cell.parentElement.getBoundingClientRect();
+          top = rowRect.top + (rowRect.height - toolsRect.height) / 2;
+          left = tableRect.left - toolsRect.width;
+          const headerSelected = cell.tagName === "TH";
+          deleteTableRowButton.disabled = headerSelected;
+          deleteTableRowButton.title = headerSelected
+            ? "The table header row cannot be deleted"
+            : "Delete row";
+        } else {
+          top = tableRect.top - toolsRect.height;
+          left = cellRect.left + (cellRect.width - toolsRect.width) / 2;
+        }
+        top = Math.max(minTop, Math.min(top, maxTop));
+        left = Math.max(2, Math.min(left, innerWidth - toolsRect.width - 2));
+        tools.style.top = `${Math.round(top)}px`;
+        tools.style.left = `${Math.round(left)}px`;
+      }
+
+      function handleTableEdgePointerMove(event) {
+        if (tableEdgeTools.some(tools => tools.contains(event.target))) return;
+        if (!editorReady || editor.getCurrentMode() !== "ir") {
+          hideTableEdgeTools();
+          return;
+        }
+
+        const cell = tableCellFromNode(event.target);
+        const table = cell?.closest("table");
+        if (!cell || !table) {
+          hideTableEdgeTools();
+          return;
+        }
+
+        const tableRect = table.getBoundingClientRect();
+        const cellRect = cell.getBoundingClientRect();
+        const rowRect = cell.parentElement.getBoundingClientRect();
+        const edgeSize = 14;
+        const rowDistance = Math.abs(event.clientX - tableRect.left);
+        const columnDistance = Math.abs(event.clientY - tableRect.top);
+        const onRowEdge = rowDistance <= edgeSize
+          && event.clientY >= rowRect.top && event.clientY <= rowRect.bottom;
+        const onColumnEdge = columnDistance <= edgeSize
+          && event.clientX >= cellRect.left && event.clientX <= cellRect.right;
+
+        if (onRowEdge && (!onColumnEdge || rowDistance <= columnDistance)) {
+          showTableEdgeTools("row", cell);
+        } else if (onColumnEdge) {
+          showTableEdgeTools("column", cell);
+        } else {
+          hideTableEdgeTools();
+        }
+      }
+
+      function selectHoveredTableCell() {
+        const surface = editorElement.querySelector(".vditor-ir > .vditor-reset");
+        if (!surface || !tableHoverCell?.isConnected) return null;
+        surface.focus({ preventScroll: true });
+        const range = document.createRange();
+        range.selectNodeContents(tableHoverCell);
+        range.collapse(true);
+        const selection = getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return surface;
+      }
+
+      function runTableAction(action) {
+        const shortcuts = {
+          "row-below": { key: "=", code: "Equal", shiftKey: false, status: "Row added below" },
+          "column-right": { key: "=", code: "Equal", shiftKey: true, status: "Column added to the right" },
+          "delete-row": { key: "-", code: "Minus", shiftKey: false, status: "Row deleted" },
+          "delete-column": { key: "-", code: "Minus", shiftKey: true, status: "Column deleted" }
+        };
+        const shortcut = shortcuts[action];
+        const surface = shortcut && selectHoveredTableCell();
+        if (!surface) {
+          hideTableEdgeTools();
+          return;
+        }
+
+        const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+        const event = new KeyboardEvent("keydown", {
+          key: shortcut.key,
+          code: shortcut.code,
+          metaKey: isMac,
+          ctrlKey: !isMac,
+          shiftKey: shortcut.shiftKey,
+          bubbles: true,
+          cancelable: true
+        });
+        surface.dispatchEvent(event);
+        if (event.defaultPrevented) updateStatus(shortcut.status);
+        hideTableEdgeTools();
       }
 
       function noteTitle(file) {
@@ -2340,6 +2501,13 @@
         if (themeMenu.hidden || themeMenu.parentElement.contains(event.target)) return;
         setThemeMenuOpen(false);
       });
+      document.addEventListener("pointerdown", event => {
+        if (tableEdgeTools.some(tools => tools.contains(event.target))) return;
+        hideTableEdgeTools();
+      });
+      document.addEventListener("pointermove", handleTableEdgePointerMove);
+      document.addEventListener("scroll", hideTableEdgeTools, true);
+      addEventListener("resize", hideTableEdgeTools);
       addEventListener("keydown", event => {
         const sidebarShortcut = event.key.toLowerCase() === "b" && event.altKey
           && (event.metaKey || event.ctrlKey) && !event.shiftKey;
@@ -2370,8 +2538,23 @@
       for (const button of viewButtons) {
         button.addEventListener("click", () => switchEditorMode(button.dataset.mode));
       }
+      for (const tools of tableEdgeTools) {
+        tools.addEventListener("pointerdown", event => event.preventDefault());
+        tools.addEventListener("keydown", event => {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          hideTableEdgeTools();
+          editor.focus();
+        });
+      }
+      for (const button of tableToolButtons) {
+        button.addEventListener("click", () => runTableAction(button.dataset.tableAction));
+      }
       editorElement.addEventListener("beforeinput", rememberIrScrollPosition, true);
-      editorElement.addEventListener("input", restoreIrScrollPosition);
+      editorElement.addEventListener("input", () => {
+        restoreIrScrollPosition();
+        hideTableEdgeTools();
+      });
       editorElement.addEventListener("keydown", handleEditorViewShortcut, true);
       editorElement.addEventListener("keydown", handleEditorKeydown, true);
       editorElement.addEventListener("click", event => {
