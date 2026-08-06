@@ -488,6 +488,7 @@
       const autoSaveTimers = new Map();
       const activeSaves = new Map();
       const attachmentPreviewUrls = new Map();
+      const attachmentPreviewReferences = new Map();
       const attachmentImageIds = new WeakMap();
       const imageWorkerRequests = new Map();
       const autoSaveDelay = 700;
@@ -1193,6 +1194,7 @@
         if (!url) return;
         URL.revokeObjectURL(url);
         attachmentPreviewUrls.delete(key);
+        attachmentPreviewReferences.delete(url);
       }
 
       function releaseAttachmentPreviews(fileId = null) {
@@ -1200,6 +1202,7 @@
           if (!fileId || key.startsWith(`${fileId}\n`)) {
             URL.revokeObjectURL(url);
             attachmentPreviewUrls.delete(key);
+            attachmentPreviewReferences.delete(url);
           }
         }
       }
@@ -1252,6 +1255,29 @@
         return match?.[1] || null;
       }
 
+      function attachmentIdForImage(image, file) {
+        const source = image.getAttribute("src");
+        const previewReference = attachmentPreviewReferences.get(source);
+        const previewId = previewReference?.fileId === file.id
+          ? previewReference.attachmentId
+          : null;
+        const candidates = [
+          image.dataset.localMarkdownAttachment,
+          attachmentImageIds.get(image),
+          attachmentIdFromSource(source),
+          previewId
+        ];
+        return candidates.find(id => id && file.attachments.has(id)) || null;
+      }
+
+      function excalidrawAttachmentFromEvent(event) {
+        const image = event.target.closest?.("img");
+        if (!image || !editorElement.contains(image)) return null;
+        const file = activeFile();
+        const id = file ? attachmentIdForImage(image, file) : null;
+        return file?.attachments.get(id)?.kind === "excalidraw" ? { file, id } : null;
+      }
+
       function attachmentBlob(attachment) {
         if (attachment.blob) return attachment.blob;
         const binary = atob(attachment.data);
@@ -1271,8 +1297,7 @@
           ".vditor-ir img[src], .vditor-wysiwyg img[src], .vditor-preview img[src]"
         );
         for (const image of images) {
-          const id = attachmentImageIds.get(image)
-            || attachmentIdFromSource(image.getAttribute("src"));
+          const id = attachmentIdForImage(image, file);
           const attachment = id ? file.attachments.get(id) : null;
           if (!attachment || activeFile() !== file) continue;
 
@@ -1282,6 +1307,7 @@
             try {
               url = URL.createObjectURL(attachmentBlob(attachment));
               attachmentPreviewUrls.set(key, url);
+              attachmentPreviewReferences.set(url, { fileId: file.id, attachmentId: id });
             } catch {
               continue;
             }
@@ -2041,15 +2067,17 @@
       editorElement.addEventListener("input", restoreIrScrollPosition);
       editorElement.addEventListener("keydown", handleEditorViewShortcut, true);
       editorElement.addEventListener("keydown", handleEditorKeydown, true);
-      editorElement.addEventListener("dblclick", event => {
-        const image = event.target.closest?.("img");
-        if (!image || !editorElement.contains(image)) return;
-        const id = image.dataset.localMarkdownAttachment || attachmentImageIds.get(image)
-          || attachmentIdFromSource(image.getAttribute("src"));
-        if (activeFile()?.attachments.get(id)?.kind !== "excalidraw") return;
+      editorElement.addEventListener("click", event => {
+        if (!excalidrawAttachmentFromEvent(event)) return;
         event.preventDefault();
         event.stopImmediatePropagation();
-        void openDrawingDialog(id);
+      }, true);
+      editorElement.addEventListener("dblclick", event => {
+        const attachment = excalidrawAttachmentFromEvent(event);
+        if (!attachment) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        void openDrawingDialog(attachment.id);
       }, true);
       drawingCancelButton.addEventListener("click", () => closeDrawingDialog());
       drawingSaveButton.addEventListener("click", () => void commitDrawing());
